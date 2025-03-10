@@ -1,0 +1,144 @@
+JSON CLI API Reference
+
+SqueezeBox's CLI API can be used to control the server via JSON queries. By changing the output format to JSON, responses will be JSON encoded for computer-friendly processing. This reference targets SlimServer/SqueezeBox Server version 7.6.2.
+
+Server URL scheme: http://server:9000/jsonrpc.js
+
+HTTP Usage:
+- Make POST requests to jsonrpc.js
+- Body should be JSON with the following format:
+  {
+    "id": 1,
+    "method": "slim.request",
+    "params": [
+      player_id,
+      [
+        "command",
+        param1,
+        param2,
+        ...
+      ]
+    ]
+  }
+
+Commands:
+----------
+
+1. Player status and control:
+   - status [start] [itemsPerResponse] [subscribe:0|1] [tags:abcdeilNortuK]
+     Get player status, including current track, volume, playlist position, etc.
+     The tags parameter controls which metadata is returned, with each letter enabling specific data.
+
+   - play
+     Start playback
+
+   - pause [0|1]
+     Toggle pause or set to specified state (0=play, 1=pause)
+
+   - stop
+     Stop playback
+
+   - time [time_in_seconds]
+     Get or seek to a position within the current track
+
+   - playlist repeat [0|1|2|?]
+     Get or set repeat mode: 0=off, 1=repeat one track, 2=repeat all
+
+   - playlist shuffle [0|1|2|?]
+     Get or set shuffle mode: 0=off, 1=shuffle by song, 2=shuffle by album
+
+   - playlist index [+1|-1|n]
+     Jump to relative or absolute position in playlist:
+     - +1: next track
+     - -1: previous track
+     - n: specific track index (0-based)
+
+   - playlist jump [index]
+     Immediately start playing the specified playlist item
+
+   - playlist command:[add|play|insert] [title:string] [url:string]
+     Add tracks to the playlist
+
+2. Player settings:
+   - mixer volume [0-100]
+     Get or set player volume level
+
+   - mixer muting [0|1]
+     Get or set player mute state
+
+   - power [0|1]
+     Get or set player power state
+
+3. Server queries:
+   - serverstatus [start] [itemsPerResponse] [subscribe:0|1]
+     Get server status, including all connected players
+
+   - players [start] [itemsPerResponse]
+     Get list of all players
+
+4. Library browsing:
+   - albums [start] [itemsPerResponse] [artist_id:ID] [search:TERM]
+     Browse albums
+
+   - artists [start] [itemsPerResponse] [search:TERM]
+     Browse artists
+
+   - genres [start] [itemsPerResponse]
+     Browse genres
+
+   - tracks [start] [itemsPerResponse] [album_id:ID] [search:TERM]
+     Browse tracks
+
+5. Advanced Control:
+   - playlistcontrol [command:load|play|add|insert] [playlist_id:ID]
+     Control playlist operations with more options
+
+   - playlists [start] [itemsPerResponse]
+     Get available saved playlists
+
+Example:
+--------
+Query:
+{
+  "id": 1,
+  "method": "slim.request",
+  "params": [
+    "00:04:20:12:e8:b5",
+    [
+      "status",
+      "-",
+      1,
+      "subscribe:0"
+    ]
+  ]
+}
+
+Response:
+{
+  "result": {
+    "playlist_timestamp": 1604183231,
+    "player_name": "SqueezeBox",
+    "playlist_tracks": 1,
+    "player_connected": 1,
+    "playlist_cur_index": 0,
+    "playlist_loop": [
+      {
+        "track_id": 12345,
+        "title": "Song Name",
+        "artist": "Artist Name",
+        "album": "Album Name",
+        "duration": 240
+      }
+    ],
+    "mode": "play",
+    "time": 45,
+    "digital_volume_control": 1,
+    "playlist_modified": 1,
+    "player_ip": "192.168.1.10",
+    "playlist_id": 1604183231,
+    "volume": 50,
+    "current_title": "Song Name",
+    "power": 1
+  },
+  "id": 1
+}

@@ -3,7 +3,6 @@ Configuration module for Squeeze CLI.
 """
 
 import os
-from typing import Dict, Optional
 
 import tomli
 import tomli_w
@@ -20,7 +19,7 @@ def get_config_path() -> str:
     return os.path.expanduser("~/.squeezerc")
 
 
-def load_config() -> Dict:
+def load_config() -> dict:
     """Load configuration from config file.
 
     Returns:
@@ -38,7 +37,7 @@ def load_config() -> Dict:
         return DEFAULT_CONFIG.copy()
 
 
-def save_config(config: Dict) -> None:
+def save_config(config: dict) -> None:
     """Save configuration to config file.
 
     Args:
@@ -50,7 +49,7 @@ def save_config(config: Dict) -> None:
         tomli_w.dump(config, f)
 
 
-def get_server_url(server_url: Optional[str] = None) -> str:
+def get_server_url(server_url: str | None = None) -> str:
     """Get server URL from config or provided value.
 
     Args:

@@ -1,0 +1,107 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+  <head>
+    <title>Squeezebox Music Player sbc2 </title>
+    <link rel="stylesheet" href="/slimserver.css" type="text/css">
+    <link rel="stylesheet" href="/skin.css" type="text/css">
+  </head>
+  <body bgcolor="#FFFFFF">
+	<h3>Squeezebox Music Player sbc2</h3>
+  	<form method="get" action="/index.html" target="_top">Current player: <select name="player">
+<option  value="00:04:20:07:c6:8d">Lab (Synced with lab-test &amp; SqueezeBox2)</option>
+<option  value="00:04:20:09:01:01">SqueezeBox2 (Synced with Lab &amp; lab-test)</option>
+<option  value="dc:a6:32:f6:2f:c6">lab-test (Synced with Lab &amp; SqueezeBox2)</option>
+<option selected value="00:04:20:12:e8:b5">sbc2</option></select><input class="stdclick" type="submit" value="Change"></form>
+   <div id="playingStatus">
+
+
+    Now stopped on
+    1 of 1:
+   </div>
+   <div class="playingSong"><a href="/songinfo.html?item=654060&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5" target="browser">pinknoise-540min</a>
+
+
+    by <a href="/clixmlbrowser/clicmd=browselibrary+items&amp;mode=albums&amp;linktitle=Artist%20(No%20Artist)&amp;artist_id=16166&amp;&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5/" target="browser" class="browseItemLink"><span style="display:inline">No Artist</span></a>
+    <span class="playingSongControls"><a href="status.html?p0=playlist&amp;p1=delete&amp;p2=0&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0"><span>(Delete)</span></a></span>
+   </div>
+<hr><a href="status.html?p0=playlist&amp;p1=jump&amp;p2=-1&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5">Prev</a>
+<a href="status.html?p0=playlist&amp;p1=jump&amp;p2=%2b1&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5">Skip</a>
+    <a href="status.html?p0=play&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5">Play</a>
+    <a href="status.html?p0=pause&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5">Pause</a>
+    <b>Stop</b>
+
+<br>Repeat:
+<a href="status.html?p0=playlist&amp;p1=repeat&amp;p2=0&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">off</a>/<a href="status.html?p0=playlist&amp;p1=repeat&amp;p2=1&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">one</a>/<b>all</b>
+<br>Shuffle:
+<b>off</b>/<a href="status.html?p0=playlist&amp;p1=shuffle&amp;p2=1&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">songs</a>/<a href="status.html?p0=playlist&amp;p1=shuffle&amp;p2=2&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">albums</a>
+
+<br>
+
+    Player:
+               <a target="_top" href="index.html?player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;p0=power&amp;p1=1">on</a>/<b>off</b>
+
+<br><br>
+Volume:
+
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=0&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">1</a>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=10&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">2</a>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=20&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">3</a>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=30&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">4</a>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=40&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">5</a>
+  <b>6</b>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=60&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">7</a>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=70&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">8</a>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=80&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">9</a>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=90&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">10</a>
+  <a href="status.html?p0=mixer&amp;p1=volume&amp;p2=100&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;start=0">11</a>
+
+
+
+
+<div id="playList">
+
+		<div id="currentPlaylistLabel">
+		The current playlist:<span id="currentPlaylistCommands">	<a href="edit_playlist.html?player=00%3A04%3A20%3A12%3Ae8%3Ab5&amp;saveCurrentPlaylist=1" target="browser" >
+	Save</a> <span class="bar">|</span> 	<a href="status.m3u?player=00%3A04%3A20%3A12%3Ae8%3Ab5" target="playlist">
+	Download</a> <span class="bar">|</span> 	<a href="status.html?p0=playlist&amp;p1=clear&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5" target="status" >
+	Clear</a>
+		pinknoise
+		</span></div>
+
+
+	<div class="browsedbList">
+
+
+
+					<a name="currentsong"></a>
+<div class="odd"  id="currentListItem">
+	<div class="browsedbListItem">
+
+		<span class="exboldlisting">
+
+		<a href="/songinfo.html?item=654060&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5" target="browser">pinknoise-540min</a>
+
+
+		</span>
+
+
+		<div class="playlistControls">
+			<a href="/status.html?p0=playlist&amp;p1=jump&amp;p2=0&amp;start=0&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5" target="status">Play</a>
+			<a href="/status.html?p0=playlist&amp;p1=move&amp;p2=0&amp;p3=%2B1&amp;start=0&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5" target="status">Down</a>
+			<a href="/status.html?p0=playlist&amp;p1=move&amp;p2=0&amp;p3=%2D1&amp;start=0&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5" target="status">Up</a>
+			<a href="/status.html?p0=playlist&amp;p1=delete&amp;p2=0&amp;start=0&amp;player=00%3A04%3A20%3A12%3Ae8%3Ab5" target="status">Remove from playlist</a>
+		</div>
+	</div>
+</div>
+
+
+
+
+	</div>
+
+
+</div>
+
+  </body>
+</html>

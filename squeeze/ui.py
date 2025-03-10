@@ -4,10 +4,9 @@ Interactive UI components for the Squeeze CLI.
 
 import curses
 import sys
-from typing import Dict, List, Optional
 
 
-def text_select_player(players: List[Dict[str, str]]) -> Optional[str]:
+def text_select_player(players: list[dict[str, str]]) -> str | None:
     """Display a simple text-based player selection menu.
 
     Args:
@@ -49,7 +48,7 @@ def text_select_player(players: List[Dict[str, str]]) -> Optional[str]:
         return None
 
 
-def curses_select_player(players: List[Dict[str, str]]) -> Optional[str]:
+def curses_select_player(players: list[dict[str, str]]) -> str | None:
     """Display a curses-based interactive player selection menu.
 
     Args:
@@ -134,7 +133,7 @@ def curses_select_player(players: List[Dict[str, str]]) -> Optional[str]:
     return None
 
 
-def select_player(players: List[Dict[str, str]]) -> Optional[str]:
+def select_player(players: list[dict[str, str]]) -> str | None:
     """Display an interactive player selection menu, using either
     curses or text-based UI depending on environment.
 

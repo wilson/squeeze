@@ -3,16 +3,15 @@ Factory module for creating appropriate SqueezeBox clients.
 """
 
 import urllib.request
-from typing import Optional, Union
 
-from squeeze.html_client import SqueezeHtmlClient
 from squeeze.exceptions import ConnectionError
+from squeeze.html_client import SqueezeHtmlClient
 from squeeze.json_client import SqueezeJsonClient
 
 
 def create_client(
-    server_url: str, prefer_json: Optional[bool] = None
-) -> Union[SqueezeHtmlClient, SqueezeJsonClient]:
+    server_url: str, prefer_json: bool | None = None
+) -> SqueezeHtmlClient | SqueezeJsonClient:
     """Create an appropriate SqueezeBox client for the given server.
 
     Args:
