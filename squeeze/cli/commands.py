@@ -4,7 +4,6 @@ CLI commands for Squeeze.
 
 import json
 import sys
-from typing import Union
 
 from squeeze.client_factory import create_client
 from squeeze.config import get_server_url, load_config, save_config
@@ -583,7 +582,7 @@ def prev_command(args: dict) -> None:
 
         # Extract position from status text (format like "2174 of 3562:")
         status_text = status.get("status", "")
-        if "of" in status_text:
+        if isinstance(status_text, str) and "of" in status_text:
             # Try to extract the position from status text
             import re
 

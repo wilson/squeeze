@@ -5,13 +5,13 @@ SqueezeBox client library for interacting with SqueezeBox server using JSON API.
 import json
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from squeeze.constants import PlayerMode, PowerState, RepeatMode, ShuffleMode
 from squeeze.exceptions import APIError, CommandError, ConnectionError, ParseError
 
 # Type alias for JSON response
-JsonDict = Dict[str, Any]
+JsonDict = dict[str, Any]
 
 # Standard status fields that should be returned by get_player_status
 DEFAULT_STATUS = {
@@ -42,7 +42,7 @@ class SqueezeJsonClient:
         self.next_id = 1  # Counter for JSON-RPC request IDs
 
     def _send_request(
-        self, player_id: Optional[str], command: str, *args: Any
+        self, player_id: str | None, command: str, *args: Any
     ) -> JsonDict:
         """Send a JSON-RPC request to the server.
 
@@ -90,7 +90,7 @@ class SqueezeJsonClient:
                 response_data = response.read().decode("utf-8")
 
                 try:
-                    result: Dict[str, Any] = json.loads(response_data)
+                    result: dict[str, Any] = json.loads(response_data)
                 except json.JSONDecodeError as e:
                     raise ParseError(f"Failed to parse JSON response: {e}")
 
@@ -121,7 +121,7 @@ class SqueezeJsonClient:
             # Catch-all for any other unexpected errors
             raise ConnectionError(f"Unexpected error: {str(e)}")
 
-    def get_players(self) -> List[Dict[str, str]]:
+    def get_players(self) -> list[dict[str, str]]:
         """Get list of available players.
 
         Returns:
@@ -164,16 +164,14 @@ class SqueezeJsonClient:
 
             return players
 
-        except (ConnectionError, APIError, ParseError) as e:
+        except (ConnectionError, APIError, ParseError):
             # Re-raise these specific exceptions
             raise
         except Exception as e:
             # Convert generic exceptions to APIError
             raise APIError(f"Failed to get players: {str(e)}")
 
-    def get_player_status(
-        self, player_id: str
-    ) -> Dict[str, Union[str, int, Dict[str, Any], List[Dict[str, Any]], None]]:
+    def get_player_status(self, player_id: str) -> dict[str, Any]:
         """Get detailed status for a specific player.
 
         Args:
@@ -271,7 +269,7 @@ class SqueezeJsonClient:
 
             return status
 
-        except (ConnectionError, APIError, ParseError) as e:
+        except (ConnectionError, APIError, ParseError):
             # Re-raise these specific exceptions
             raise
         except Exception as e:
@@ -343,10 +341,10 @@ class SqueezeJsonClient:
         except Exception as e:
             # Convert generic exceptions to CommandError
             raise CommandError(str(e), command=f"seek to {seconds}")
-            
+
     def show_now_playing(self, player_id: str, debug: bool = False) -> None:
         """Show the Now Playing screen on the player.
-        
+
         This mimics pressing the Now Playing button on the remote control,
         displaying the currently playing track in the server-configured format.
 
@@ -375,7 +373,7 @@ class SqueezeJsonClient:
         self,
         player_id: str,
         command: str,
-        params: Optional[List[str]] = None,
+        params: list[str] | None = None,
         debug: bool = False,
     ) -> None:
         """Send a command to a player.
@@ -420,7 +418,7 @@ class SqueezeJsonClient:
             # Convert generic exceptions to CommandError
             raise CommandError(str(e), command=cmd_str)
 
-    def get_server_status(self) -> Dict[str, Any]:
+    def get_server_status(self) -> dict[str, Any]:
         """Get server status.
 
         Returns:
@@ -437,7 +435,7 @@ class SqueezeJsonClient:
             if "result" not in response:
                 raise ParseError("Invalid response from server: missing 'result' field")
 
-            result: Dict[str, Any] = response["result"]
+            result: dict[str, Any] = response["result"]
 
             # Add some derived fields for convenience
             if "players_loop" in result:
@@ -452,7 +450,7 @@ class SqueezeJsonClient:
 
             return result
 
-        except (ConnectionError, APIError, ParseError) as e:
+        except (ConnectionError, APIError, ParseError):
             # Re-raise these specific exceptions
             raise
         except Exception as e:
@@ -461,7 +459,7 @@ class SqueezeJsonClient:
 
     def get_library_info(
         self, command: str, start: int = 0, count: int = 100, **kwargs: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get library information (artists, albums, tracks, etc).
 
         Args:
@@ -493,13 +491,13 @@ class SqueezeJsonClient:
             # e.g., "artists" returns "artists_loop"
             loop_key = f"{command}_loop"
             if loop_key in response["result"]:
-                result: List[Dict[str, Any]] = response["result"][loop_key]
+                result: list[dict[str, Any]] = response["result"][loop_key]
                 return result
 
             # No results found
             return []
 
-        except (ConnectionError, APIError, ParseError) as e:
+        except (ConnectionError, APIError, ParseError):
             # Re-raise these specific exceptions
             raise
         except Exception as e:
@@ -507,8 +505,8 @@ class SqueezeJsonClient:
             raise APIError(f"Failed to get {command}: {str(e)}")
 
     def get_artists(
-        self, start: int = 0, count: int = 100, search: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, start: int = 0, count: int = 100, search: str | None = None
+    ) -> list[dict[str, Any]]:
         """Get list of artists.
 
         Args:
@@ -534,9 +532,9 @@ class SqueezeJsonClient:
         self,
         start: int = 0,
         count: int = 100,
-        artist_id: Optional[str] = None,
-        search: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        artist_id: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Get list of albums.
 
         Args:
@@ -565,9 +563,9 @@ class SqueezeJsonClient:
         self,
         start: int = 0,
         count: int = 100,
-        album_id: Optional[str] = None,
-        search: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        album_id: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Get list of tracks.
 
         Args:

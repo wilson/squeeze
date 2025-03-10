@@ -27,9 +27,8 @@ repos:
     -   id: ruff
         args: [--fix, --exit-non-zero-on-fix]
 
-# Temporarily disable mypy until we fix all the type issues
-#-   repo: https://github.com/pre-commit/mirrors-mypy
-#    rev: v1.8.0
-#    hooks:
-#    -   id: mypy
-#        additional_dependencies: [types-requests]
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+    -   id: mypy
+        additional_dependencies: [types-requests]
