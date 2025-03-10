@@ -31,10 +31,10 @@ class TestCreateClient:
     def test_prefer_json_true_http_error(self, server_url: str) -> None:
         """Test creating a client when prefer_json is True and JSON API returns HTTP error."""
         with patch("urllib.request.urlopen") as mock_urlopen:
-            # Create an HTTP error with headers compatible with the http.client.HTTPMessage type
-            from email.message import Message
+            # Create an HTTP error with the proper header type that urllib actually uses
+            from http.client import HTTPMessage
 
-            headers = Message()
+            headers = HTTPMessage()
             mock_urlopen.side_effect = urllib.error.HTTPError(
                 url=f"{server_url}/jsonrpc.js",
                 code=404,
@@ -82,10 +82,10 @@ class TestCreateClient:
     def test_auto_detect_fallback_to_html(self, server_url: str) -> None:
         """Test falling back to HTML client when JSON API detection fails."""
         with patch("urllib.request.urlopen") as mock_urlopen:
-            # Create an HTTP error with headers compatible with the http.client.HTTPMessage type
-            from email.message import Message
+            # Create an HTTP error with the proper header type that urllib actually uses
+            from http.client import HTTPMessage
 
-            headers = Message()
+            headers = HTTPMessage()
             mock_urlopen.side_effect = urllib.error.HTTPError(
                 url=f"{server_url}/jsonrpc.js",
                 code=404,
