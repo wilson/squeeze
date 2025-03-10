@@ -30,11 +30,22 @@ ignore_missing_imports = true
 module = "pytest.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "tomli"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tomli_w"
+ignore_missing_imports = true
+
 # Treat test files less strictly
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+disallow_untyped_decorators = false
+warn_return_any = false
+disable_error_code = ["misc", "assignment"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

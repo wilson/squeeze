@@ -1,8 +1,6 @@
 """Tests for the SqueezeHtmlClient class using pytest."""
 
-from unittest.mock import patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from squeeze.html_client import SqueezeHtmlClient
 
@@ -17,7 +15,7 @@ def test_init() -> None:
     assert client.server_url == "http://example.com:9000"
 
 
-def test_get_html(mock_urlopen: pytest.fixture) -> None:
+def test_get_html(mock_urlopen: MagicMock) -> None:
     """Test get_html method."""
     # Set the mock response
     mock_response = mock_urlopen.return_value.__enter__.return_value
@@ -59,7 +57,7 @@ def test_get_players(html_client: SqueezeHtmlClient) -> None:
         assert result[1]["name"] == "Player Two"
 
 
-def test_send_command(mock_urlopen: pytest.fixture) -> None:
+def test_send_command(mock_urlopen: MagicMock) -> None:
     """Test send_command method."""
     client = SqueezeHtmlClient("http://example.com:9000")
 

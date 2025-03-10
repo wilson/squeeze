@@ -5,10 +5,12 @@ from collections.abc import Generator
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
+from pytest import fixture
 
 from squeeze.html_client import SqueezeHtmlClient
 from squeeze.json_client import SqueezeJsonClient
+
+# No custom protocol needed with proper typing
 
 # Sample player data for testing
 SAMPLE_PLAYERS = [
@@ -63,19 +65,19 @@ SAMPLE_JSON_STATUS_RESPONSE = {
 }
 
 
-@pytest.fixture
+@fixture
 def server_url() -> str:
     """Fixture for test server URL."""
     return "http://example.com:9000"
 
 
-@pytest.fixture
+@fixture
 def player_id() -> str:
     """Fixture for test player ID."""
     return SAMPLE_PLAYERS[0]["id"]
 
 
-@pytest.fixture
+@fixture
 def mock_html_client() -> Generator[MagicMock, None, None]:
     """Fixture for a mocked SqueezeHtmlClient."""
     with patch("squeeze.html_client.SqueezeHtmlClient") as mock_client:
@@ -90,7 +92,7 @@ def mock_html_client() -> Generator[MagicMock, None, None]:
         yield instance
 
 
-@pytest.fixture
+@fixture
 def mock_json_client() -> Generator[MagicMock, None, None]:
     """Fixture for a mocked SqueezeJsonClient."""
     with patch("squeeze.json_client.SqueezeJsonClient") as mock_client:
@@ -107,7 +109,7 @@ def mock_json_client() -> Generator[MagicMock, None, None]:
         yield instance
 
 
-@pytest.fixture
+@fixture
 def mock_urlopen() -> Generator[MagicMock, None, None]:
     """Fixture for mocking urllib.request.urlopen."""
     with patch("urllib.request.urlopen") as mock:
@@ -123,13 +125,13 @@ def mock_urlopen() -> Generator[MagicMock, None, None]:
         yield mock
 
 
-@pytest.fixture
+@fixture
 def html_client(server_url: str) -> SqueezeHtmlClient:
     """Fixture for creating a real SqueezeHtmlClient instance."""
     return SqueezeHtmlClient(server_url)
 
 
-@pytest.fixture
+@fixture
 def json_client(server_url: str) -> SqueezeJsonClient:
     """Fixture for creating a real SqueezeJsonClient instance."""
     return SqueezeJsonClient(server_url)
@@ -149,7 +151,7 @@ class MockResponse:
         return self.content
 
 
-@pytest.fixture
+@fixture
 def json_mock_urlopen() -> Generator[MagicMock, None, None]:
     """Fixture for mocking urlopen to return JSON responses."""
     with patch("urllib.request.urlopen") as mock:

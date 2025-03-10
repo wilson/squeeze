@@ -24,6 +24,9 @@ setup(
         "tomli-w>=1.0.0",
         # curses is part of the standard library for most Python installations
     ],
+    package_data={
+        "squeeze": ["py.typed"],  # Indicate the package is typed
+    },
     extras_require={
         "dev": [
             "pytest>=6.0.0",

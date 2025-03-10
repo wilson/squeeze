@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
+from pytest import mark
 
 from squeeze.cli.commands import (
     display_command,
@@ -54,12 +54,16 @@ def test_get_player_id_no_player_found(mock_json_client: MagicMock) -> None:
 
 
 # Use parametrize to test multiple command scenarios
-@pytest.mark.parametrize(
+@mark.parametrize(
     "command, args, expected_params",
     [
         # Display command tests
         ("display", {"message": "Test Message"}, ["line1", "Test Message"]),
-        ("display", {"message": "Line1\\nLine2"}, ["line1", "Line1", "line2", "Line2"]),
+        (
+            "display",
+            {"message": "Line1\\nLine2"},
+            ["line1", "Line1", "line2", "Line2"],
+        ),
         (
             "display",
             {"message": "Line1\\nLine2\\nLine3"},
@@ -91,7 +95,6 @@ def test_display_command(
         patch("squeeze.cli.commands.create_client") as mock_create_client,
         patch("squeeze.cli.commands.get_player_id") as mock_get_player_id,
     ):
-
         # Configure mocks
         mock_get_url.return_value = "http://example.com:9000"
         mock_create_client.return_value = mock_json_client
@@ -114,7 +117,7 @@ def test_display_command(
             assert param in command_args[2]
 
 
-@pytest.mark.parametrize(
+@mark.parametrize(
     "position, expected_seconds",
     [
         # Direct seconds
@@ -139,7 +142,6 @@ def test_seek_command(
         patch("squeeze.cli.commands.create_client") as mock_create_client,
         patch("squeeze.cli.commands.get_player_id") as mock_get_player_id,
     ):
-
         # Configure mocks
         mock_get_url.return_value = "http://example.com:9000"
         mock_create_client.return_value = mock_json_client
@@ -169,7 +171,6 @@ def test_status_command_basic(mock_json_client: MagicMock, player_id: str) -> No
         patch("squeeze.cli.commands.create_client") as mock_create_client,
         patch("squeeze.cli.commands.get_player_id") as mock_get_player_id,
     ):
-
         # Configure mocks
         mock_get_url.return_value = "http://example.com:9000"
         mock_create_client.return_value = mock_json_client
@@ -197,35 +198,52 @@ def test_status_command_live_mode(mock_json_client: MagicMock, player_id: str) -
         patch("squeeze.cli.commands.create_client") as mock_create_client,
         patch("squeeze.cli.commands.get_player_id") as mock_get_player_id,
     ):
-
         # Configure mocks
         mock_get_url.return_value = "http://example.com:9000"
         mock_create_client.return_value = mock_json_client
         mock_get_player_id.return_value = player_id
 
-        # Make the SqueezeJsonClient type check pass
-        mock_json_client.__class__ = SqueezeJsonClient
+        # We'll patch the hasattr and isinstance functions to make our type checks pass
+        # This avoids the type error with __class__ assignment
+        with (
+            patch("squeeze.cli.commands.hasattr") as mock_hasattr,
+            patch("squeeze.cli.commands.isinstance") as mock_isinstance,
+        ):
 
-        # Simulate KeyboardInterrupt after first call
-        mock_json_client.get_player_status.side_effect = [
-            {
-                "player_id": player_id,
-                "player_name": "Test",
-                "power": 1,
-                "status": "playing",
-                "volume": 50,
-                "current_track": {
-                    "title": "Test",
-                    "artist": "Test",
-                    "position": 30,
-                    "duration": 300,
+            # Configure mocks to pass the type checks in the code
+            mock_hasattr.side_effect = lambda obj, attr: (
+                True
+                if obj is mock_json_client and attr == "get_player_status"
+                else hasattr(obj, attr)
+            )
+            mock_isinstance.side_effect = lambda obj, cls: (
+                True
+                if obj is mock_json_client and cls is SqueezeJsonClient
+                else isinstance(obj, cls)
+            )
+
+            # Simulate KeyboardInterrupt after first call
+            mock_json_client.get_player_status.side_effect = [
+                {
+                    "player_id": player_id,
+                    "player_name": "Test",
+                    "power": 1,
+                    "status": "playing",
+                    "volume": 50,
+                    "current_track": {
+                        "title": "Test",
+                        "artist": "Test",
+                        "position": 30,
+                        "duration": 300,
+                    },
                 },
-            },
-            KeyboardInterrupt(),
-        ]
+                KeyboardInterrupt(),
+            ]
 
-        # Run the command, should exit on KeyboardInterrupt
-        status_command(args)
+            # Run the command, should exit on KeyboardInterrupt
+            status_command(args)
 
-        # Verify subscribe was used
-        mock_json_client.get_player_status.assert_called_with(player_id, subscribe=True)
+            # Verify subscribe was used
+            mock_json_client.get_player_status.assert_called_with(
+                player_id, subscribe=True
+            )

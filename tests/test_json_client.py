@@ -1,9 +1,7 @@
 """Tests for the SqueezeJsonClient class."""
 
 import json
-from unittest.mock import patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from squeeze.json_client import SqueezeJsonClient
 
@@ -19,7 +17,7 @@ def test_init() -> None:
     assert client.server_url == "http://example.com:9000"
 
 
-def test_send_request(json_mock_urlopen: pytest.fixture) -> None:
+def test_send_request(json_mock_urlopen: MagicMock) -> None:
     """Test _send_request method."""
     client = SqueezeJsonClient("http://example.com:9000")
 
