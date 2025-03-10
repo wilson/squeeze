@@ -92,6 +92,34 @@ squeeze power on [player_id]
 squeeze power off [player_id]
 ```
 
+Shuffle mode:
+```bash
+# Set a specific shuffle mode
+squeeze shuffle off [player_id]
+squeeze shuffle songs [player_id]
+squeeze shuffle albums [player_id]
+
+# Cycle through shuffle modes (off -> songs -> albums -> off)
+squeeze shuffle [player_id]
+```
+
+Repeat mode:
+```bash
+# Set a specific repeat mode
+squeeze repeat off [player_id]
+squeeze repeat one [player_id]
+squeeze repeat all [player_id]
+
+# Cycle through repeat modes (off -> all -> one -> off)
+squeeze repeat [player_id]
+```
+
+Now Playing screen:
+```bash
+# Activate the Now Playing screen (like pressing the 'Now Playing' button on the remote)
+squeeze now [player_id]
+```
+
 Note: Square brackets `[]` indicate optional parameters. If omitted, you'll get an interactive player selection.
 
 ### JSON API Only Commands
@@ -117,11 +145,16 @@ This project requires Python 3.11 or higher.
 
 ### Version History
 
-- v0.2.0 - Breaking changes:
-  - Removed backward compatibility layer (`client.py`)
-  - Direct imports from `squeeze.client` should be changed to `squeeze.html_client`
-  - Renamed `SqueezeClient` to `SqueezeHtmlClient` for clarity
-  - Added pre-commit hooks for code quality
+- v0.2.0:
+  - Added new commands:
+    - `shuffle` - Control shuffle mode (off/songs/albums)
+    - `repeat` - Control repeat mode (off/one/all)
+    - `now` - Show Now Playing screen
+  - Breaking changes:
+    - Removed backward compatibility layer (`client.py`)
+    - Direct imports from `squeeze.client` should be changed to `squeeze.html_client`
+    - Renamed `SqueezeClient` to `SqueezeHtmlClient` for clarity
+  - Added pre-commit hooks for code quality (black, isort, ruff, mypy)
 
 - v0.1.0 - Initial release
 

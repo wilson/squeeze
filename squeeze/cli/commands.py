@@ -7,6 +7,7 @@ import sys
 
 from squeeze.client_factory import create_client
 from squeeze.config import get_server_url, load_config, save_config
+from squeeze.constants import RepeatMode, ShuffleMode
 from squeeze.exceptions import (
     APIError,
     CommandError,
@@ -646,4 +647,139 @@ def now_playing_command(args: dict) -> None:
         print(f"Now Playing screen activated for player {player_id}")
     except Exception as e:
         print(f"Error showing Now Playing screen: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def shuffle_command(args: dict) -> None:
+    """Set or cycle through shuffle modes.
+
+    Supported modes:
+    - off: No shuffling
+    - songs: Shuffle songs
+    - albums: Shuffle albums
+
+    If no mode is specified, cycle through modes in the order: off -> songs -> albums -> off.
+
+    Args:
+        args: Command-line arguments
+    """
+    server_url = get_server_url(args.get("server"))
+    use_json = args.get("json", True)
+    client = create_client(server_url, prefer_json=use_json)
+
+    player_id = get_player_id(args, client)
+    if not player_id:
+        sys.exit(1)
+
+    mode = args.get("mode")
+
+    # If no mode specified, we need to get current state to cycle
+    if not mode:
+        try:
+            status = client.get_player_status(player_id)
+            current_mode = status.get("shuffle", 0)
+
+            # Cycle to next mode (0 -> 1 -> 2 -> 0)
+            next_mode = (current_mode + 1) % 3
+            mode_value = str(next_mode)
+
+            # Get human-readable mode name for display
+            mode_name = ShuffleMode.to_string(next_mode)
+        except Exception as e:
+            print(f"Error getting current shuffle mode: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Convert named mode to value
+        mode_map = {
+            "off": ShuffleMode.OFF,
+            "songs": ShuffleMode.SONGS,
+            "albums": ShuffleMode.ALBUMS,
+        }
+
+        if mode not in mode_map:
+            print(
+                f"Error: Invalid shuffle mode '{mode}'. Must be one of: off, songs, albums",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        mode_value = str(mode_map[mode])
+        mode_name = ShuffleMode.to_string(mode_map[mode])
+
+    try:
+        client.send_command(player_id, "playlist", ["shuffle", mode_value])
+        print(f"Shuffle mode set to '{mode_name}' for player {player_id}")
+    except Exception as e:
+        print(f"Error setting shuffle mode: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def repeat_command(args: dict) -> None:
+    """Set or cycle through repeat modes.
+
+    Supported modes:
+    - off: No repeat
+    - one: Repeat current track
+    - all: Repeat entire playlist
+
+    If no mode is specified, cycle through modes in the order: off -> all -> one -> off.
+
+    Args:
+        args: Command-line arguments
+    """
+    server_url = get_server_url(args.get("server"))
+    use_json = args.get("json", True)
+    client = create_client(server_url, prefer_json=use_json)
+
+    player_id = get_player_id(args, client)
+    if not player_id:
+        sys.exit(1)
+
+    mode = args.get("mode")
+
+    # If no mode specified, we need to get current state to cycle
+    if not mode:
+        try:
+            status = client.get_player_status(player_id)
+            current_mode = status.get("repeat", 0)
+
+            # Define the cycle order: 0 (off) -> 2 (all) -> 1 (one) -> 0 (off)
+            # This order matches how most music players cycle through repeat modes
+            if current_mode == RepeatMode.OFF:
+                next_mode = RepeatMode.ALL
+            elif current_mode == RepeatMode.ALL:
+                next_mode = RepeatMode.ONE
+            else:  # RepeatMode.ONE
+                next_mode = RepeatMode.OFF
+
+            mode_value = str(next_mode)
+
+            # Get human-readable mode name for display
+            mode_name = RepeatMode.to_string(next_mode)
+        except Exception as e:
+            print(f"Error getting current repeat mode: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Convert named mode to value
+        mode_map = {
+            "off": RepeatMode.OFF,
+            "one": RepeatMode.ONE,
+            "all": RepeatMode.ALL,
+        }
+
+        if mode not in mode_map:
+            print(
+                f"Error: Invalid repeat mode '{mode}'. Must be one of: off, one, all",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        mode_value = str(mode_map[mode])
+        mode_name = RepeatMode.to_string(mode_map[mode])
+
+    try:
+        client.send_command(player_id, "playlist", ["repeat", mode_value])
+        print(f"Repeat mode set to '{mode_name}' for player {player_id}")
+    except Exception as e:
+        print(f"Error setting repeat mode: {e}", file=sys.stderr)
         sys.exit(1)

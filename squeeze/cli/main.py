@@ -16,8 +16,10 @@ from squeeze.cli.commands import (
     players_command,
     power_command,
     prev_command,
+    repeat_command,
     search_command,
     server_command,
+    shuffle_command,
     status_command,
     stop_command,
     volume_command,
@@ -288,6 +290,54 @@ def create_parser() -> argparse.ArgumentParser:
         "--debug-command", action="store_true", help="Debug command URL"
     )
 
+    # Shuffle command
+    shuffle_parser = subparsers.add_parser("shuffle", help="Control shuffle mode")
+    shuffle_parser.add_argument(
+        "mode",
+        nargs="?",
+        choices=["off", "songs", "albums"],
+        help="Shuffle mode to set (if omitted, cycles through modes)",
+    )
+    shuffle_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to send command to"
+    )
+    shuffle_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Use interactive player selection (default when TTY available)",
+    )
+    shuffle_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Disable interactive player selection",
+    )
+
+    # Repeat command
+    repeat_parser = subparsers.add_parser("repeat", help="Control repeat mode")
+    repeat_parser.add_argument(
+        "mode",
+        nargs="?",
+        choices=["off", "one", "all"],
+        help="Repeat mode to set (if omitted, cycles through modes)",
+    )
+    repeat_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to send command to"
+    )
+    repeat_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Use interactive player selection (default when TTY available)",
+    )
+    repeat_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Disable interactive player selection",
+    )
+
     # Config command
     config_parser = subparsers.add_parser("config", help="Manage configuration")
     config_parser.add_argument(
@@ -357,6 +407,10 @@ def main(args: list[str] | None = None) -> int:
         jump_command(args_dict)
     elif parsed_args.command == "now":
         now_playing_command(args_dict)
+    elif parsed_args.command == "shuffle":
+        shuffle_command(args_dict)
+    elif parsed_args.command == "repeat":
+        repeat_command(args_dict)
     else:
         print(f"Error: Unknown command: {parsed_args.command}", file=sys.stderr)
         return 1
