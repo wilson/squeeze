@@ -653,10 +653,7 @@ def extract_track_position(status: dict[str, Any]) -> int:
         if match:
             try:
                 position = int(match.group(1))
-                # Convert to seconds if position is in time units (e.g., milliseconds)
-                # This is a heuristic - if position is very large (>1000), assume it's in milliseconds
-                if position > 1000:
-                    position = position // 1000  # Convert to seconds
+                # No conversion needed as SlimServer consistently uses seconds for position values
             except (ValueError, IndexError):
                 position = 0
 
