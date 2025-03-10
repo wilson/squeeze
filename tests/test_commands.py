@@ -1,11 +1,14 @@
 """Tests for the squeeze CLI commands."""
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 from pytest import mark
 
 from squeeze.cli.commands import (
+    DisplayCommandArgs,
+    PlayerCommandArgs,
+    SeekCommandArgs,
+    StatusCommandArgs,
     display_command,
     format_time,
     get_player_id,
@@ -31,7 +34,7 @@ def test_format_time() -> None:
 def test_get_player_id_with_arg() -> None:
     """Test get_player_id when player ID is provided."""
     client = MagicMock()
-    args = {"player_id": "00:11:22:33:44:55"}
+    args = PlayerCommandArgs(player_id="00:11:22:33:44:55")
 
     result = get_player_id(args, client)
 
@@ -47,7 +50,7 @@ def test_get_player_id_no_player_found(mock_json_client: MagicMock) -> None:
 
     # Redirect stdout/stderr for testing
     with patch("sys.stdout"), patch("sys.stderr"):
-        args = {"player_id": None, "no_interactive": True}
+        args = PlayerCommandArgs(player_id=None, no_interactive=True)
         result = get_player_id(args, mock_json_client)
 
         assert result is None
@@ -56,37 +59,41 @@ def test_get_player_id_no_player_found(mock_json_client: MagicMock) -> None:
 
 # Use parametrize to test multiple command scenarios
 @mark.parametrize(
-    "command, args, expected_params",
+    "command, message, duration, expected_params",
     [
         # Display command tests
-        ("display", {"message": "Test Message"}, ["line1", "Test Message"]),
+        ("display", "Test Message", None, ["line1", "Test Message"]),
         (
             "display",
-            {"message": "Line1\\nLine2"},
+            "Line1\\nLine2",
+            None,
             ["line1", "Line1", "line2", "Line2"],
         ),
         (
             "display",
-            {"message": "Line1\\nLine2\\nLine3"},
+            "Line1\\nLine2\\nLine3",
+            None,
             ["line1", "Line1", "line2", "Line2", "line3", "Line3"],
         ),
         (
             "display",
-            {"message": "Message", "duration": "5"},
+            "Message",
+            5,
             ["line1", "Message", "duration", "5"],
         ),
     ],
 )
 def test_display_command(
     command: str,
-    args: dict[str, Any],
+    message: str,
+    duration: int | None,
     expected_params: list[str],
     mock_json_client: MagicMock,
     player_id: str,
 ) -> None:
     """Test display_command with various arguments."""
-    # Add player_id to args
-    args["player_id"] = player_id
+    # Create a DisplayCommandArgs instance
+    args = DisplayCommandArgs(player_id=player_id, message=message, duration=duration)
 
     # Redirect stdout/stderr for testing
     with (
@@ -133,7 +140,8 @@ def test_seek_command(
     position: str, expected_seconds: int, mock_json_client: MagicMock, player_id: str
 ) -> None:
     """Test seek_command with various time formats."""
-    args = {"player_id": player_id, "position": position}
+    # Create SeekCommandArgs instance
+    args = SeekCommandArgs(player_id=player_id, position=position)
 
     # Redirect stdout/stderr for testing
     with (
@@ -162,7 +170,8 @@ def test_seek_command(
 
 def test_status_command_basic(mock_json_client: MagicMock, player_id: str) -> None:
     """Test basic status_command functionality."""
-    args = {"player_id": player_id, "live": False}
+    # Create StatusCommandArgs instance
+    args = StatusCommandArgs(player_id=player_id, live=False)
 
     # Redirect stdout/stderr for testing
     with (
@@ -189,7 +198,8 @@ def test_status_command_basic(mock_json_client: MagicMock, player_id: str) -> No
 
 def test_status_command_live_mode(mock_json_client: MagicMock, player_id: str) -> None:
     """Test status_command in live mode."""
-    args = {"player_id": player_id, "live": True}
+    # Create StatusCommandArgs instance with live=True
+    args = StatusCommandArgs(player_id=player_id, live=True)
 
     # Redirect stdout/stderr for testing
     with (

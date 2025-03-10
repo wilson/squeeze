@@ -28,9 +28,15 @@ def create_client(server_url: str) -> SqueezeJsonClient:
         urllib.request.urlopen(req, timeout=2)
         return SqueezeJsonClient(server_url)
     except urllib.error.HTTPError as e:
-        raise ConnectionError(f"JSON API not available: HTTP error {e.code}")
+        match e.code:
+            case 401 | 403:
+                raise ConnectionError(f"Authentication required: HTTP {e.code}")
+            case 404:
+                raise ConnectionError("API endpoint not found")
+            case _:
+                raise ConnectionError(f"API not available: HTTP error {e.code}")
     except urllib.error.URLError as e:
         reason = str(e.reason) if hasattr(e, "reason") else str(e)
-        raise ConnectionError(f"Failed to connect to JSON API: {reason}")
+        raise ConnectionError(f"Failed to connect to server: {reason}")
     except Exception as e:
-        raise ConnectionError(f"Failed to connect to JSON API: {str(e)}")
+        raise ConnectionError(f"Failed to connect to server: {str(e)}")

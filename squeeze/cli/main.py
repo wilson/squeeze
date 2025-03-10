@@ -6,7 +6,22 @@ import argparse
 import sys
 
 from squeeze import __version__
-from squeeze.cli.commands import (
+from squeeze.cli.commands import (  # Command functions; Command argument classes
+    ConfigCommandArgs,
+    DisplayCommandArgs,
+    JumpCommandArgs,
+    PlayerCommandArgs,
+    PlayersCommandArgs,
+    PowerCommandArgs,
+    PrevCommandArgs,
+    RemoteCommandArgs,
+    RepeatCommandArgs,
+    SearchCommandArgs,
+    SeekCommandArgs,
+    ServerCommandArgs,
+    ShuffleCommandArgs,
+    StatusCommandArgs,
+    VolumeCommandArgs,
     config_command,
     display_command,
     jump_command,
@@ -46,8 +61,6 @@ def create_parser() -> argparse.ArgumentParser:
         "--server",
         help="SqueezeBox server URL (defaults to value in ~/.squeezerc)",
     )
-
-    # No longer needed with JSON-only client
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
@@ -436,48 +449,187 @@ def main(args: list[str] | None = None) -> int:
         print("Error: No command specified", file=sys.stderr)
         return 1
 
-    # Convert args to dict for passing to command functions
+    # Get args as a dictionary
     args_dict = vars(parsed_args)
 
-    # Dispatch to command function
+    # Common arguments for all commands
+    server = args_dict.get("server")
+    debug_command = args_dict.get("debug_command", False)
+
+    # Player command common arguments
+    player_id = args_dict.get("player_id")
+    interactive = args_dict.get("interactive", False)
+    no_interactive = args_dict.get("no_interactive", False)
+
+    # Create the appropriate dataclass based on the command and dispatch
     if parsed_args.command == "status":
-        status_command(args_dict)
+        live = args_dict.get("live", False)
+        status_args = StatusCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            live=live,
+        )
+        status_command(status_args)
     elif parsed_args.command == "players":
-        players_command(args_dict)
-    elif parsed_args.command == "play":
-        play_command(args_dict)
-    elif parsed_args.command == "pause":
-        pause_command(args_dict)
-    elif parsed_args.command == "stop":
-        stop_command(args_dict)
+        players_args = PlayersCommandArgs(server=server, debug_command=debug_command)
+        players_command(players_args)
+    elif parsed_args.command in ("play", "pause", "stop", "now"):
+        player_args = PlayerCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+        )
+        if parsed_args.command == "play":
+            play_command(player_args)
+        elif parsed_args.command == "pause":
+            pause_command(player_args)
+        elif parsed_args.command == "stop":
+            stop_command(player_args)
+        else:  # "now"
+            now_playing_command(player_args)
     elif parsed_args.command == "volume":
-        volume_command(args_dict)
+        volume_str = args_dict.get("volume", "0")
+        # Convert to int for the dataclass
+        try:
+            volume = int(volume_str)
+        except (TypeError, ValueError):
+            volume = 0
+
+        volume_args = VolumeCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            volume=volume,
+        )
+        volume_command(volume_args)
     elif parsed_args.command == "power":
-        power_command(args_dict)
+        state = args_dict.get("state", "on")
+        power_args = PowerCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            state=state,
+        )
+        power_command(power_args)
     elif parsed_args.command == "config":
-        config_command(args_dict)
+        set_server = args_dict.get("set_server")
+        config_args = ConfigCommandArgs(
+            server=server, debug_command=debug_command, set_server=set_server
+        )
+        config_command(config_args)
     elif parsed_args.command == "search":
-        search_command(args_dict)
+        term = args_dict.get("term", "")
+        search_type = args_dict.get("type")
+        search_args = SearchCommandArgs(
+            server=server, debug_command=debug_command, term=term, type=search_type
+        )
+        search_command(search_args)
     elif parsed_args.command == "server":
-        server_command(args_dict)
+        server_args = ServerCommandArgs(server=server, debug_command=debug_command)
+        server_command(server_args)
     elif parsed_args.command == "next":
-        next_command(args_dict)
+        next_args = PlayerCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+        )
+        next_command(next_args)
     elif parsed_args.command == "prev":
-        prev_command(args_dict)
+        threshold = args_dict.get("threshold", 5)
+        prev_args = PrevCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            threshold=threshold,
+        )
+        prev_command(prev_args)
     elif parsed_args.command == "jump":
-        jump_command(args_dict)
-    elif parsed_args.command == "now":
-        now_playing_command(args_dict)
+        index_str = args_dict.get("index", "0")
+        # Convert to int for the dataclass
+        try:
+            index = int(index_str)
+        except (TypeError, ValueError):
+            index = 0
+
+        jump_args = JumpCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            index=index,
+        )
+        jump_command(jump_args)
     elif parsed_args.command == "shuffle":
-        shuffle_command(args_dict)
+        mode = args_dict.get("mode")
+        shuffle_args = ShuffleCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            mode=mode,
+        )
+        shuffle_command(shuffle_args)
     elif parsed_args.command == "repeat":
-        repeat_command(args_dict)
+        mode = args_dict.get("mode")
+        repeat_args = RepeatCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            mode=mode,
+        )
+        repeat_command(repeat_args)
     elif parsed_args.command == "remote":
-        remote_command(args_dict)
+        button = args_dict.get("button", "select")
+        remote_args = RemoteCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            button=button,
+        )
+        remote_command(remote_args)
     elif parsed_args.command == "display":
-        display_command(args_dict)
+        message = args_dict.get("message", "")
+        duration = args_dict.get("duration")
+        display_args = DisplayCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            message=message,
+            duration=duration,
+        )
+        display_command(display_args)
     elif parsed_args.command == "seek":
-        seek_command(args_dict)
+        position = args_dict.get("position", "")
+        seek_args = SeekCommandArgs(
+            server=server,
+            debug_command=debug_command,
+            player_id=player_id,
+            interactive=interactive,
+            no_interactive=no_interactive,
+            position=position,
+        )
+        seek_command(seek_args)
     else:
         print(f"Error: Unknown command: {parsed_args.command}", file=sys.stderr)
         return 1

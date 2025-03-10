@@ -9,8 +9,6 @@ from pytest import fixture
 
 from squeeze.json_client import SqueezeJsonClient
 
-# No custom protocol needed with proper typing
-
 # Sample player data for testing
 SAMPLE_PLAYERS = [
     {"id": "00:11:22:33:44:55", "name": "Living Room Player"},
@@ -76,7 +74,7 @@ def player_id() -> str:
     return SAMPLE_PLAYERS[0]["id"]
 
 
-# HTML client fixture removed in v0.3.0
+# Additional fixtures can be added here if needed
 
 
 @fixture
@@ -101,7 +99,7 @@ def mock_urlopen() -> Generator[MagicMock, None, None]:
     """Fixture for mocking urllib.request.urlopen."""
     with patch("urllib.request.urlopen") as mock:
         response_mock = MagicMock()
-        # Default HTML response
+        # Mock response content
         response_mock.read.return_value = (
             b'<html><select name="player">'
             b'<option value="00:11:22:33:44:55">Living Room Player</option>'
@@ -112,7 +110,7 @@ def mock_urlopen() -> Generator[MagicMock, None, None]:
         yield mock
 
 
-# HTML client fixture removed in v0.3.0
+# Client fixtures
 
 
 @fixture

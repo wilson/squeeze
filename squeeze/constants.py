@@ -2,9 +2,11 @@
 Constants used throughout the application.
 """
 
+from enum import IntEnum, StrEnum
+
 
 # Player modes
-class PlayerMode:
+class PlayerMode(StrEnum):
     """Player mode constants."""
 
     STOP = "stop"
@@ -14,17 +16,19 @@ class PlayerMode:
     @classmethod
     def to_string(cls, mode: str) -> str:
         """Convert mode to a user-friendly string."""
-        if mode == cls.PLAY:
-            return "Now Playing"
-        elif mode == cls.PAUSE:
-            return "Now Paused"
-        elif mode == cls.STOP:
-            return "Stopped"
-        return "Unknown"
+        match mode:
+            case cls.PLAY:
+                return "Now Playing"
+            case cls.PAUSE:
+                return "Now Paused"
+            case cls.STOP:
+                return "Stopped"
+            case _:
+                return "Unknown"
 
 
 # Shuffle modes
-class ShuffleMode:
+class ShuffleMode(IntEnum):
     """Shuffle mode constants."""
 
     OFF = 0
@@ -34,17 +38,19 @@ class ShuffleMode:
     @classmethod
     def to_string(cls, mode: int) -> str:
         """Convert shuffle mode to a user-friendly string."""
-        if mode == cls.OFF:
-            return "Off"
-        elif mode == cls.SONGS:
-            return "Songs"
-        elif mode == cls.ALBUMS:
-            return "Albums"
-        return "Unknown"
+        match mode:
+            case cls.OFF:
+                return "Off"
+            case cls.SONGS:
+                return "Songs"
+            case cls.ALBUMS:
+                return "Albums"
+            case _:
+                return "Unknown"
 
 
 # Repeat modes
-class RepeatMode:
+class RepeatMode(IntEnum):
     """Repeat mode constants."""
 
     OFF = 0
@@ -54,17 +60,19 @@ class RepeatMode:
     @classmethod
     def to_string(cls, mode: int) -> str:
         """Convert repeat mode to a user-friendly string."""
-        if mode == cls.OFF:
-            return "Off"
-        elif mode == cls.ONE:
-            return "One"
-        elif mode == cls.ALL:
-            return "All"
-        return "Unknown"
+        match mode:
+            case cls.OFF:
+                return "Off"
+            case cls.ONE:
+                return "One"
+            case cls.ALL:
+                return "All"
+            case _:
+                return "Unknown"
 
 
 # Power states
-class PowerState:
+class PowerState(StrEnum):
     """Power state constants."""
 
     OFF = "off"

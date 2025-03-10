@@ -20,7 +20,7 @@ class TestCreateClient:
         return "http://example.com:9000"
 
     def test_create_client_success(self, server_url: str) -> None:
-        """Test creating a JSON client when JSON API is available."""
+        """Test creating a client when the API is available."""
         with patch("urllib.request.urlopen") as mock_urlopen:
             client = create_client(server_url)
             assert isinstance(client, SqueezeJsonClient)
@@ -28,7 +28,7 @@ class TestCreateClient:
             mock_urlopen.assert_called_once()
 
     def test_create_client_http_error(self, server_url: str) -> None:
-        """Test creating a client when JSON API returns HTTP error."""
+        """Test creating a client when the API returns HTTP error."""
         with patch("urllib.request.urlopen") as mock_urlopen:
             # Create an HTTP error with the proper header type that urllib actually uses
             from http.client import HTTPMessage
@@ -43,16 +43,16 @@ class TestCreateClient:
             )
             with pytest.raises(ConnectionError) as excinfo:
                 create_client(server_url)
-            assert "JSON API not available" in str(excinfo.value)
-            assert "HTTP error 404" in str(excinfo.value)
+            # Updated assertion to match new error format from pattern matching
+            assert "API endpoint not found" in str(excinfo.value)
 
     def test_create_client_url_error(self, server_url: str) -> None:
-        """Test creating a client when JSON API connection fails."""
+        """Test creating a client when the API connection fails."""
         with patch("urllib.request.urlopen") as mock_urlopen:
             mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
             with pytest.raises(ConnectionError) as excinfo:
                 create_client(server_url)
-            assert "Failed to connect to JSON API" in str(excinfo.value)
+            assert "Failed to connect to server" in str(excinfo.value)
             assert "Connection refused" in str(excinfo.value)
 
     def test_create_client_generic_error(self, server_url: str) -> None:
@@ -61,7 +61,7 @@ class TestCreateClient:
             mock_urlopen.side_effect = Exception("Something went wrong")
             with pytest.raises(ConnectionError) as excinfo:
                 create_client(server_url)
-            assert "Failed to connect to JSON API" in str(excinfo.value)
+            assert "Failed to connect to server" in str(excinfo.value)
             assert "Something went wrong" in str(excinfo.value)
 
     def test_url_trailing_slash_handling(self) -> None:

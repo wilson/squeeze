@@ -5,7 +5,8 @@ CLI commands for Squeeze.
 import json
 import sys
 from collections.abc import Callable
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 from squeeze.client_factory import create_client
 from squeeze.config import get_server_url, load_config, save_config
@@ -17,14 +18,124 @@ from squeeze.exceptions import (
     ParseError,
     SqueezeError,
 )
-from squeeze.json_client import SqueezeJsonClient
+from squeeze.json_client import PlayerStatus, SqueezeJsonClient
 from squeeze.ui import select_player
 
-# Type alias for client type
+# Type alias for the JSON client
 ClientType = SqueezeJsonClient
 
-# Type alias for command arguments
-ArgsDict = dict[str, Any]
+
+# Command argument dataclasses for improved type safety
+@dataclass
+class CommandArgs:
+    """Base class for command arguments."""
+
+    server: str | None = None
+    debug_command: bool = False
+
+
+@dataclass
+class PlayerCommandArgs(CommandArgs):
+    """Arguments for commands that operate on a player."""
+
+    player_id: str | None = None
+    interactive: bool = False
+    no_interactive: bool = False
+
+
+@dataclass
+class StatusCommandArgs(PlayerCommandArgs):
+    """Arguments for the status command."""
+
+    live: bool = False
+
+
+@dataclass
+class VolumeCommandArgs(PlayerCommandArgs):
+    """Arguments for the volume command."""
+
+    volume: int = field(default=0)  # Default needed for dataclass rules
+
+
+@dataclass
+class ShuffleCommandArgs(PlayerCommandArgs):
+    """Arguments for the shuffle command."""
+
+    mode: Literal["off", "songs", "albums"] | None = None
+
+
+@dataclass
+class RepeatCommandArgs(PlayerCommandArgs):
+    """Arguments for the repeat command."""
+
+    mode: Literal["off", "one", "all"] | None = None
+
+
+@dataclass
+class SeekCommandArgs(PlayerCommandArgs):
+    """Arguments for the seek command."""
+
+    position: str = field(default="")  # Default needed for dataclass rules
+
+
+@dataclass
+class PowerCommandArgs(PlayerCommandArgs):
+    """Arguments for the power command."""
+
+    state: Literal["on", "off"] = field(default="on")
+
+
+@dataclass
+class RemoteCommandArgs(PlayerCommandArgs):
+    """Arguments for the remote control command."""
+
+    button: Literal["up", "down", "left", "right", "select", "browse"] = field(
+        default="select"
+    )
+
+
+@dataclass
+class DisplayCommandArgs(PlayerCommandArgs):
+    """Arguments for the display command."""
+
+    message: str = field(default="")
+    duration: int | None = None
+
+
+@dataclass
+class JumpCommandArgs(PlayerCommandArgs):
+    """Arguments for the jump command."""
+
+    index: int = field(default=0)
+
+
+@dataclass
+class SearchCommandArgs(CommandArgs):
+    """Arguments for the search command."""
+
+    term: str = field(default="")
+    type: Literal["all", "artists", "albums", "tracks"] | None = None
+
+
+@dataclass
+class ConfigCommandArgs(CommandArgs):
+    """Arguments for the config command."""
+
+    set_server: str | None = None
+
+
+@dataclass
+class PlayersCommandArgs(CommandArgs):
+    """Arguments for the players command."""
+
+    pass
+
+
+@dataclass
+class ServerCommandArgs(CommandArgs):
+    """Arguments for the server command."""
+
+    pass
 
 
 def display_progress_bar(position: int, duration: int) -> None:
@@ -46,7 +157,7 @@ def display_progress_bar(position: int, duration: int) -> None:
 
 
 def print_player_status(
-    status: dict[str, Any], show_all_track_fields: bool = False
+    status: PlayerStatus, show_all_track_fields: bool = False
 ) -> None:
     """Format and print player status information.
 
@@ -157,14 +268,14 @@ def display_live_status(client: ClientType, player_id: str) -> None:
         print("\nExiting live mode.")
 
 
-def status_command(args: ArgsDict) -> None:
+def status_command(args: StatusCommandArgs) -> None:
     """Show status of a player.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
-    live_mode = args.get("live", False)
+    server_url = get_server_url(args.server)
+    live_mode = args.live
 
     try:
         client = create_client(server_url)
@@ -215,13 +326,13 @@ def format_time(seconds: int) -> str:
         return f"{minutes}:{seconds:02d}"
 
 
-def players_command(args: ArgsDict) -> None:
+def players_command(args: PlayersCommandArgs) -> None:
     """List available players.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     try:
@@ -239,23 +350,19 @@ def players_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def get_player_id(args: ArgsDict, client: ClientType) -> str | None:
+def get_player_id(args: PlayerCommandArgs, client: ClientType) -> str | None:
     """Get player ID from arguments or interactive selection.
 
     Args:
-        args: Command-line arguments
-        client: SqueezeClient or SqueezeJsonClient instance
+        args: Command-line arguments as PlayerCommandArgs
+        client: SqueezeJsonClient instance
 
     Returns:
         Player ID or None if no selection was made
     """
-    player_id = args.get("player_id")
-
-    # Force interactive mode if --interactive is set
-    force_interactive = args.get("interactive", False)
-
-    # Disable interactive mode if --no-interactive is set
-    disable_interactive = args.get("no_interactive", False)
+    player_id = args.player_id
+    force_interactive = args.interactive
+    disable_interactive = args.no_interactive
 
     # Interactive selection is needed if:
     # 1. Player ID is not provided, or
@@ -266,31 +373,29 @@ def get_player_id(args: ArgsDict, client: ClientType) -> str | None:
             print("No players found")
             return None
 
-        # Use interactive selection unless explicitly disabled
-        if not disable_interactive:
-            print("DEBUG: About to run interactive selection", file=sys.stderr)
-            player_id = select_player(players)
-            if player_id:
-                print(f"DEBUG: Selected player: {player_id}", file=sys.stderr)
-            else:
-                print("DEBUG: No player selected", file=sys.stderr)
-        else:
-            # Just list players if interactive mode is disabled
-            print("Available players:")
-            for player in players:
-                print(f"  {player['id']}: {player['name']}")
-            return None
+        # Use pattern matching to handle the player selection flow
+        match (disable_interactive, players):
+            case (True, _):
+                # Interactive mode disabled, just list players
+                print("Available players:")
+                for player in players:
+                    print(f"  {player['id']}: {player['name']}")
+                return None
+            case (False, _):
+                # Use interactive selection
+                player_id = select_player(players)
+                return player_id
 
     return player_id
 
 
-def play_command(args: ArgsDict) -> None:
+def play_command(args: PlayerCommandArgs) -> None:
     """Send play command to a player.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
@@ -305,13 +410,13 @@ def play_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def pause_command(args: ArgsDict) -> None:
+def pause_command(args: PlayerCommandArgs) -> None:
     """Send pause command to a player.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
@@ -326,13 +431,13 @@ def pause_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def stop_command(args: ArgsDict) -> None:
+def stop_command(args: PlayerCommandArgs) -> None:
     """Send stop command to a player.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
@@ -347,61 +452,50 @@ def stop_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def volume_command(args: ArgsDict) -> None:
+def volume_command(args: VolumeCommandArgs) -> None:
     """Set volume for a player.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
-    volume = args.get("volume")
-    if volume is None:
-        print("Error: Volume is required", file=sys.stderr)
-        sys.exit(1)
+    volume = args.volume
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
 
     # Validate volume (0-100)
-    try:
-        volume_int = int(volume)
-        if volume_int < 0 or volume_int > 100:
-            print("Error: Volume must be between 0 and 100", file=sys.stderr)
-            sys.exit(1)
-    except ValueError:
-        print("Error: Volume must be a number", file=sys.stderr)
+    if volume < 0 or volume > 100:
+        print("Error: Volume must be between 0 and 100", file=sys.stderr)
         sys.exit(1)
 
-    debug = args.get("debug_command", False)
+    debug = args.debug_command
 
     try:
-        client.send_command(player_id, "mixer", ["volume", volume], debug=debug)
+        client.send_command(player_id, "mixer", ["volume", str(volume)], debug=debug)
         print(f"Volume set to {volume} for player {player_id}")
     except Exception as e:
         print(f"Error setting volume: {e}", file=sys.stderr)
         sys.exit(1)
 
 
-def power_command(args: ArgsDict) -> None:
+def power_command(args: PowerCommandArgs) -> None:
     """Set power state for a player.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
 
-    state = args.get("state")
-    if state not in ["on", "off"]:
-        print("Error: State must be 'on' or 'off'", file=sys.stderr)
-        sys.exit(1)
+    state = args.state
 
     # Convert to 1/0
     state_value = "1" if state == "on" else "0"
@@ -432,26 +526,26 @@ def display_search_results(
     print()
 
 
-def search_command(args: ArgsDict) -> None:
+def search_command(args: SearchCommandArgs) -> None:
     """Search for music in the library.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
-    # Ensure we have a JSON client
+    # Verify the client has the required method
     if not hasattr(client, "get_artists"):
-        print("Error: Search requires JSON API support", file=sys.stderr)
+        print("Error: Server doesn't support this command", file=sys.stderr)
         sys.exit(1)
 
-    search_term = args.get("term")
+    search_term = args.term
     if not search_term:
         print("Error: Search term is required", file=sys.stderr)
         sys.exit(1)
 
-    search_type = args.get("type", "all")
+    search_type = args.type if args.type else "all"
 
     # Define formatters for each result type
     formatters = {
@@ -482,7 +576,7 @@ def search_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def config_command(args: ArgsDict) -> None:
+def config_command(args: ConfigCommandArgs) -> None:
     """Manage configuration.
 
     Args:
@@ -491,41 +585,39 @@ def config_command(args: ArgsDict) -> None:
     config = load_config()
 
     # With no arguments, print current config
-    if not args.get("set_server"):
+    if not args.set_server:
         print(json.dumps(config, indent=2))
         return
 
     # Set server URL
-    server_url = args.get("set_server")
+    server_url = args.set_server
     config.setdefault("server", {})["url"] = server_url
 
     save_config(config)
     print(f"Server URL set to {server_url}")
 
 
-def server_command(args: ArgsDict) -> None:
+def server_command(args: ServerCommandArgs) -> None:
     """Get server status information.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
 
-    # Always force JSON for server command - it requires JSON API
     try:
         client = create_client(server_url)
     except ConnectionError as e:
         print(f"Error connecting to server: {e}", file=sys.stderr)
-        print("The 'server' command requires JSON API support.", file=sys.stderr)
         print(
             "Check your server URL or use --server to specify a different server.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # Double-check we have a JSON client (should never fail with prefer_json=True)
+    # Verify the client has the required method
     if not hasattr(client, "get_server_status"):
-        print("Error: Server command requires JSON API support", file=sys.stderr)
+        print("Error: Server doesn't support this command", file=sys.stderr)
         print(
             "Try checking your server URL or using --server to specify a different server",
             file=sys.stderr,
@@ -569,13 +661,13 @@ def server_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def next_command(args: ArgsDict) -> None:
+def next_command(args: PlayerCommandArgs) -> None:
     """Send next track command to a player.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
@@ -590,30 +682,20 @@ def next_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def jump_command(args: ArgsDict) -> None:
+def jump_command(args: JumpCommandArgs) -> None:
     """Jump to a specific track in the playlist.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
 
-    track_index = args.get("index")
-    if track_index is None:
-        print("Error: Track index is required", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        # Convert to integer
-        track_index = int(track_index)
-    except ValueError:
-        print("Error: Track index must be a number", file=sys.stderr)
-        sys.exit(1)
+    track_index = args.index
 
     try:
         # Use 'playlist jump' instead of 'playlist index' to immediately play the track
@@ -626,7 +708,7 @@ def jump_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def extract_track_position(status: dict[str, Any]) -> int:
+def extract_track_position(status: PlayerStatus) -> int:
     """Extract current track position in seconds from player status.
 
     Args:
@@ -635,29 +717,26 @@ def extract_track_position(status: dict[str, Any]) -> int:
     Returns:
         Current position in seconds
     """
-    position = 0
+    import re
 
-    # Try to get position directly from current_track
-    current_track = status.get("current_track", {})
-    if isinstance(current_track, dict) and "position" in current_track:
-        position = current_track["position"]
-        return position
+    # Use pattern matching to extract position
+    match status:
+        # Case 1: Position is in current_track dictionary
+        case {"current_track": {"position": position}} if isinstance(position, int):
+            return position
 
-    # Extract position from status text (format like "2174 of 3562:")
-    status_text = status.get("status", "")
-    if isinstance(status_text, str) and "of" in status_text:
-        # Try to extract the position from status text
-        import re
+        # Case 2: Extract from status text if it contains "X of Y" format
+        case {"status": status_text} if (
+            isinstance(status_text, str) and "of" in status_text
+        ):
+            if match := re.search(r"(\d+)\s+of\s+(\d+)", status_text):
+                try:
+                    return int(match.group(1))
+                except (ValueError, IndexError):
+                    return 0
 
-        match = re.search(r"(\d+)\s+of\s+(\d+)", status_text)
-        if match:
-            try:
-                position = int(match.group(1))
-                # No conversion needed as SlimServer consistently uses seconds for position values
-            except (ValueError, IndexError):
-                position = 0
-
-    return position
+    # Default case: No position found
+    return 0
 
 
 def restart_track(client: ClientType, player_id: str) -> None:
@@ -670,14 +749,18 @@ def restart_track(client: ClientType, player_id: str) -> None:
     Raises:
         Exception: If seeking fails
     """
-    if hasattr(client, "seek_to_time"):
-        client.seek_to_time(player_id, 0, debug=False)
-    else:
-        # Simplified fallback - just use the 'time' command directly
-        client.send_command(player_id, "time", ["0"])
+    # Use seek_to_time method
+    client.seek_to_time(player_id, 0, debug=False)
 
 
-def prev_command(args: ArgsDict) -> None:
+@dataclass
+class PrevCommandArgs(PlayerCommandArgs):
+    """Arguments for the prev command."""
+
+    threshold: int = 5
+
+
+def prev_command(args: PrevCommandArgs) -> None:
     """Send previous track command to a player.
 
     Mimics the behavior of remote controls:
@@ -687,7 +770,7 @@ def prev_command(args: ArgsDict) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
@@ -695,12 +778,8 @@ def prev_command(args: ArgsDict) -> None:
         sys.exit(1)
 
     try:
-        # Get custom threshold from args or use default of 5 seconds
-        threshold = args.get("threshold", 5)
-        try:
-            threshold = int(threshold)
-        except (TypeError, ValueError):
-            threshold = 5
+        # Get threshold from args
+        threshold = args.threshold
 
         # First check the current track position
         status = client.get_player_status(player_id)
@@ -724,7 +803,7 @@ def prev_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def now_playing_command(args: ArgsDict) -> None:
+def now_playing_command(args: PlayerCommandArgs) -> None:
     """Show Now Playing screen on a player.
 
     This mimics pressing the Now Playing button on the official remote control,
@@ -733,7 +812,7 @@ def now_playing_command(args: ArgsDict) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
@@ -741,15 +820,15 @@ def now_playing_command(args: ArgsDict) -> None:
         sys.exit(1)
 
     try:
-        # Use the new show_now_playing method for both client types
-        client.show_now_playing(player_id, debug=args.get("debug_command", False))
+        # Use the show_now_playing method
+        client.show_now_playing(player_id, debug=args.debug_command)
         print(f"Now Playing screen activated for player {player_id}")
     except Exception as e:
         print(f"Error showing Now Playing screen: {e}", file=sys.stderr)
         sys.exit(1)
 
 
-def shuffle_command(args: ArgsDict) -> None:
+def shuffle_command(args: ShuffleCommandArgs) -> None:
     """Set or cycle through shuffle modes.
 
     Supported modes:
@@ -760,49 +839,39 @@ def shuffle_command(args: ArgsDict) -> None:
     If no mode is specified, cycle through modes in the order: off -> songs -> albums -> off.
 
     Args:
-        args: Command-line arguments
+        args: Command-line arguments as ShuffleCommandArgs
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
+    mode = args.mode
+
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
 
-    mode = args.get("mode")
-
-    # If no mode specified, we need to get current state to cycle
-    if not mode:
-        try:
-            status = client.get_player_status(player_id)
-            current_mode = status.get("shuffle", 0)
-
-            # Cycle to next mode (0 -> 1 -> 2 -> 0)
-            next_mode = (current_mode + 1) % 3
-            mode_value = str(next_mode)
-
-            # Get human-readable mode name for display
-            mode_name = ShuffleMode.to_string(next_mode)
-        except Exception as e:
-            print(f"Error getting current shuffle mode: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        # Convert named mode to value
-        mode_map = {
-            "off": ShuffleMode.OFF,
-            "songs": ShuffleMode.SONGS,
-            "albums": ShuffleMode.ALBUMS,
-        }
-
-        if mode not in mode_map:
-            print(
-                f"Error: Invalid shuffle mode '{mode}'. Must be one of: off, songs, albums",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        mode_value = str(mode_map[mode])
-        mode_name = ShuffleMode.to_string(mode_map[mode])
+    # Use pattern matching for cleaner flow control
+    match mode:
+        case None:
+            # Cycle to next mode if none specified
+            try:
+                status = client.get_player_status(player_id)
+                current_mode = status.get("shuffle", 0)
+                next_mode = (current_mode + 1) % 3
+                mode_value = str(next_mode)
+                mode_name = ShuffleMode.to_string(next_mode)
+            except Exception as e:
+                print(f"Error getting current shuffle mode: {e}", file=sys.stderr)
+                sys.exit(1)
+        case "off":
+            mode_value = str(ShuffleMode.OFF)
+            mode_name = ShuffleMode.to_string(ShuffleMode.OFF)
+        case "songs":
+            mode_value = str(ShuffleMode.SONGS)
+            mode_name = ShuffleMode.to_string(ShuffleMode.SONGS)
+        case "albums":
+            mode_value = str(ShuffleMode.ALBUMS)
+            mode_name = ShuffleMode.to_string(ShuffleMode.ALBUMS)
 
     try:
         client.send_command(player_id, "playlist", ["shuffle", mode_value])
@@ -812,7 +881,7 @@ def shuffle_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def repeat_command(args: ArgsDict) -> None:
+def repeat_command(args: RepeatCommandArgs) -> None:
     """Set or cycle through repeat modes.
 
     Supported modes:
@@ -825,54 +894,49 @@ def repeat_command(args: ArgsDict) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
 
-    mode = args.get("mode")
+    mode = args.mode
 
-    # If no mode specified, we need to get current state to cycle
-    if not mode:
-        try:
-            status = client.get_player_status(player_id)
-            current_mode = status.get("repeat", 0)
+    # Use pattern matching for cleaner flow control
+    match mode:
+        case None:
+            # Cycle to next mode if none specified
+            try:
+                status = client.get_player_status(player_id)
+                current_mode = status.get("repeat", 0)
 
-            # Define the cycle order: 0 (off) -> 2 (all) -> 1 (one) -> 0 (off)
-            # This order matches how most music players cycle through repeat modes
-            if current_mode == RepeatMode.OFF:
-                next_mode = RepeatMode.ALL
-            elif current_mode == RepeatMode.ALL:
-                next_mode = RepeatMode.ONE
-            else:  # RepeatMode.ONE
-                next_mode = RepeatMode.OFF
+                # Define the cycle order: 0 (off) -> 2 (all) -> 1 (one) -> 0 (off)
+                # This order matches how most music players cycle through repeat modes
+                next_mode = (
+                    RepeatMode.ALL
+                    if current_mode == RepeatMode.OFF
+                    else (
+                        RepeatMode.ONE
+                        if current_mode == RepeatMode.ALL
+                        else RepeatMode.OFF
+                    )  # RepeatMode.ONE or any other case
+                )
 
-            mode_value = str(next_mode)
-
-            # Get human-readable mode name for display
-            mode_name = RepeatMode.to_string(next_mode)
-        except Exception as e:
-            print(f"Error getting current repeat mode: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        # Convert named mode to value
-        mode_map = {
-            "off": RepeatMode.OFF,
-            "one": RepeatMode.ONE,
-            "all": RepeatMode.ALL,
-        }
-
-        if mode not in mode_map:
-            print(
-                f"Error: Invalid repeat mode '{mode}'. Must be one of: off, one, all",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        mode_value = str(mode_map[mode])
-        mode_name = RepeatMode.to_string(mode_map[mode])
+                mode_value = str(next_mode)
+                mode_name = RepeatMode.to_string(next_mode)
+            except Exception as e:
+                print(f"Error getting current repeat mode: {e}", file=sys.stderr)
+                sys.exit(1)
+        case "off":
+            mode_value = str(RepeatMode.OFF)
+            mode_name = RepeatMode.to_string(RepeatMode.OFF)
+        case "one":
+            mode_value = str(RepeatMode.ONE)
+            mode_name = RepeatMode.to_string(RepeatMode.ONE)
+        case "all":
+            mode_value = str(RepeatMode.ALL)
+            mode_name = RepeatMode.to_string(RepeatMode.ALL)
 
     try:
         client.send_command(player_id, "playlist", ["repeat", mode_value])
@@ -882,7 +946,7 @@ def repeat_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def remote_command(args: ArgsDict) -> None:
+def remote_command(args: RemoteCommandArgs) -> None:
     """Send a remote control button press to a player.
 
     Simulates pressing a button on the physical SqueezeBox remote control.
@@ -898,14 +962,14 @@ def remote_command(args: ArgsDict) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
 
-    button = args.get("button")
+    button = args.button
 
     # Map friendly button names to IR codes
     button_map = {
@@ -916,13 +980,6 @@ def remote_command(args: ArgsDict) -> None:
         "select": "center",  # Also known as "ok" or "enter"
         "browse": "browse",  # Browse music library
     }
-
-    if button not in button_map:
-        print(
-            f"Error: Unknown button '{button}'. Must be one of: {', '.join(button_map.keys())}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
 
     command_name = button_map[button]
 
@@ -935,7 +992,7 @@ def remote_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def display_command(args: ArgsDict) -> None:
+def display_command(args: DisplayCommandArgs) -> None:
     """Display a message on a player's screen.
 
     This sends a custom message to the player's display. The message can include
@@ -944,14 +1001,14 @@ def display_command(args: ArgsDict) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
 
-    message = args.get("message")
+    message = args.message
     if not message:
         print("Error: Message is required", file=sys.stderr)
         sys.exit(1)
@@ -960,13 +1017,7 @@ def display_command(args: ArgsDict) -> None:
     lines = message.split("\\n")
 
     # Get optional duration
-    duration = args.get("duration")
-    if duration:
-        try:
-            duration = int(duration)
-        except ValueError:
-            print("Error: Duration must be a number (seconds)", file=sys.stderr)
-            sys.exit(1)
+    duration = args.duration
 
     try:
         # Configure command parameters
@@ -999,55 +1050,45 @@ def display_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
-def seek_command(args: ArgsDict) -> None:
+def seek_command(args: SeekCommandArgs) -> None:
     """Seek to a specific position in the current track.
 
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.get("server"))
+    server_url = get_server_url(args.server)
     client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
 
-    position = args.get("position")
-    if position is None:
-        print("Error: Position is required", file=sys.stderr)
-        sys.exit(1)
+    position = args.position
 
     # Parse time value which can be in seconds or MM:SS format
     try:
-        if ":" in position:
-            # Parse MM:SS or HH:MM:SS format
-            parts = position.split(":")
-            if len(parts) == 2:
+        # Match against different time formats
+        match position.split(":"):
+            case [seconds] if seconds.isdigit():
+                # Simple seconds format
+                total_seconds = int(seconds)
+            case [minutes, seconds] if minutes.isdigit() and seconds.isdigit():
                 # MM:SS format
-                minutes, seconds = parts
                 total_seconds = int(minutes) * 60 + int(seconds)
-            elif len(parts) == 3:
+            case [hours, minutes, seconds] if all(
+                part.isdigit() for part in [hours, minutes, seconds]
+            ):
                 # HH:MM:SS format
-                hours, minutes, seconds = parts
                 total_seconds = int(hours) * 3600 + int(minutes) * 60 + int(seconds)
-            else:
+            case _:
                 raise ValueError("Invalid time format")
-        else:
-            # Simple seconds format
-            total_seconds = int(position)
     except ValueError:
         print("Error: Position must be in seconds or MM:SS format", file=sys.stderr)
         sys.exit(1)
 
     try:
-        # Use the seek_to_time method from the JSON client
-        if hasattr(client, "seek_to_time"):
-            client.seek_to_time(
-                player_id, total_seconds, debug=args.get("debug_command", False)
-            )
-        else:
-            # Fallback for clients that don't have seek_to_time
-            client.send_command(player_id, "time", [str(total_seconds)])
+        # Use the seek_to_time method
+        client.seek_to_time(player_id, total_seconds, debug=args.debug_command)
 
         print(f"Seeked to {format_time(total_seconds)} in the current track")
     except Exception as e:

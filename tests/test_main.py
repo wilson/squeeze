@@ -24,7 +24,6 @@ class TestParser:
         args = parse_args(["status"])
         assert args.command == "status"
         assert args.player_id is None
-        # json flag removed in v0.3.0
 
     def test_parse_args_with_options(self) -> None:
         """Test parsing command-line arguments with options."""
@@ -88,9 +87,9 @@ class TestMainFunction:
             result = main(["players"])
             assert result == 0
             mock_command.assert_called_once()
-            # Verify the argument passed to the command function
-            args_dict = mock_command.call_args[0][0]
-            assert args_dict["command"] == "players"
+            # Now commands receive dataclass instances
+            args = mock_command.call_args[0][0]
+            assert hasattr(args, "server")
 
     def test_main_status_command(self) -> None:
         """Test main function with status command."""
@@ -98,11 +97,10 @@ class TestMainFunction:
             result = main(["status", "00:11:22:33:44:55", "--live"])
             assert result == 0
             mock_command.assert_called_once()
-            # Verify the arguments passed to the command function
-            args_dict = mock_command.call_args[0][0]
-            assert args_dict["command"] == "status"
-            assert args_dict["player_id"] == "00:11:22:33:44:55"
-            assert args_dict["live"] is True
+            # Verify the arguments passed to the StatusCommandArgs
+            args = mock_command.call_args[0][0]
+            assert args.player_id == "00:11:22:33:44:55"
+            assert args.live is True
 
     @pytest.mark.parametrize(
         "command,mock_function,extra_args",
@@ -136,6 +134,35 @@ class TestMainFunction:
             result = main(args)
             assert result == 0
             mock_command.assert_called_once()
-            # Verify the command name in the args dict
-            args_dict = mock_command.call_args[0][0]
-            assert args_dict["command"] == command
+
+            # Verify that we are passing a dataclass
+            args_obj = mock_command.call_args[0][0]
+
+            # All command args dataclasses have debug_command attribute
+            assert hasattr(args_obj, "debug_command")
+
+            # For commands with extra args, check some specific attributes
+            if command == "volume" and extra_args:
+                assert hasattr(args_obj, "volume")
+                assert args_obj.volume == 50
+            elif command == "power" and extra_args:
+                assert hasattr(args_obj, "state")
+                assert args_obj.state == "on"
+            elif command == "config" and extra_args:
+                assert hasattr(args_obj, "set_server")
+                assert args_obj.set_server == "http://example.com:9000"
+            elif command == "search" and extra_args:
+                assert hasattr(args_obj, "term")
+                assert args_obj.term == "test"
+            elif command == "jump" and extra_args:
+                assert hasattr(args_obj, "index")
+                assert args_obj.index == 0
+            elif command == "remote" and extra_args:
+                assert hasattr(args_obj, "button")
+                assert args_obj.button == "up"
+            elif command == "display" and extra_args:
+                assert hasattr(args_obj, "message")
+                assert args_obj.message == "Hello World"
+            elif command == "seek" and extra_args:
+                assert hasattr(args_obj, "position")
+                assert args_obj.position == "30"

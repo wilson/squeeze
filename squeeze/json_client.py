@@ -5,16 +5,47 @@ SqueezeBox client library for interacting with SqueezeBox server using JSON API.
 import json
 import urllib.parse
 import urllib.request
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, NotRequired, Self, TypedDict
 
 from squeeze.constants import PlayerMode, PowerState, RepeatMode, ShuffleMode
 from squeeze.exceptions import APIError, CommandError, ConnectionError, ParseError
 
-# Type alias for JSON response
-JsonDict = dict[str, Any]
+# Track information dictionary
+TrackDict = dict[str, Any]
+
+
+# TypedDict for player status
+class PlayerStatus(TypedDict):
+    """Type definition for player status information."""
+
+    player_id: str
+    player_name: str
+    power: str  # PowerState value
+    status: str
+    mode: str  # PlayerMode value
+    volume: int
+    shuffle: int
+    repeat: int
+    current_track: TrackDict
+    playlist_count: int
+    playlist_position: int
+    shuffle_mode: NotRequired[str]
+    repeat_mode: NotRequired[str]
+    playlist: NotRequired[list[dict[str, Any]]]
+
+
+# TypedDict for JSON response
+class JsonResponse(TypedDict):
+    """Type definition for JSON-RPC response."""
+
+    id: int
+    result: dict[str, Any]
+    error: NotRequired[dict[str, Any] | str]
+
 
 # Standard status fields that should be returned by get_player_status
-DEFAULT_STATUS = {
+DEFAULT_STATUS: PlayerStatus = {
     "player_id": "",
     "player_name": "Unknown",
     "power": PowerState.OFF,
@@ -29,21 +60,32 @@ DEFAULT_STATUS = {
 }
 
 
+@dataclass
 class SqueezeJsonClient:
     """Client for interacting with SqueezeBox server using JSON API."""
 
-    def __init__(self, server_url: str):
-        """Initialize the SqueezeBox client.
+    server_url: str
+    next_id: int = field(default=1)
+
+    def __post_init__(self) -> None:
+        """Initialize after instance creation."""
+        self.server_url = self.server_url.rstrip("/")
+
+    @classmethod
+    def create(cls, server_url: str) -> Self:
+        """Factory method to create a client instance.
 
         Args:
             server_url: URL of the SqueezeBox server
+
+        Returns:
+            A new client instance
         """
-        self.server_url = server_url.rstrip("/")
-        self.next_id = 1  # Counter for JSON-RPC request IDs
+        return cls(server_url.rstrip("/"))
 
     def _send_request(
         self, player_id: str | None, command: str, *args: Any
-    ) -> JsonDict:
+    ) -> JsonResponse:
         """Send a JSON-RPC request to the server.
 
         Args:
@@ -90,28 +132,41 @@ class SqueezeJsonClient:
                 response_data = response.read().decode("utf-8")
 
                 try:
-                    result: dict[str, Any] = json.loads(response_data)
+                    result: JsonResponse = json.loads(response_data)
                 except json.JSONDecodeError as e:
                     raise ParseError(f"Failed to parse JSON response: {e}")
 
-                # Check for error in response
+                # Check for error in response using pattern matching
                 if "error" in result:
                     error_info = result["error"]
-                    if isinstance(error_info, dict):
-                        code = error_info.get("code", 0)
-                        message = error_info.get("message", "Unknown error")
-                        raise APIError(f"Server error: {message}", code)
-                    else:
-                        raise APIError(f"Server error: {error_info}")
+                    match error_info:
+                        case dict():
+                            code = error_info.get("code", 0)
+                            message = error_info.get("message", "Unknown error")
+                            raise APIError(f"Server error: {message}", code)
+                        case str():
+                            raise APIError(f"Server error: {error_info}")
+                        case _:
+                            raise APIError(f"Server error: {error_info}")
 
                 return result
 
         except urllib.error.HTTPError as e:
-            try:
-                response_body = e.read().decode("utf-8")
-                raise APIError(f"HTTP error {e.code}: {response_body}")
-            except Exception:
-                raise APIError(f"HTTP error {e.code}")
+            match e.code:
+                case 401 | 403:
+                    raise APIError(f"Authentication error: HTTP {e.code}")
+                case 404:
+                    raise APIError("API endpoint not found")
+                case 429:
+                    raise APIError("Rate limit exceeded")
+                case 500 | 502 | 503 | 504:
+                    raise APIError(f"Server error: HTTP {e.code}")
+                case _:
+                    try:
+                        response_body = e.read().decode("utf-8")
+                        raise APIError(f"HTTP error {e.code}: {response_body}")
+                    except Exception:
+                        raise APIError(f"HTTP error {e.code}")
 
         except urllib.error.URLError as e:
             reason = str(e.reason) if hasattr(e, "reason") else str(e)
@@ -173,7 +228,7 @@ class SqueezeJsonClient:
 
     def get_player_status(
         self, player_id: str, subscribe: bool = False
-    ) -> dict[str, Any]:
+    ) -> PlayerStatus:
         """Get detailed status for a specific player.
 
         Args:
@@ -252,7 +307,8 @@ class SqueezeJsonClient:
                 status["repeat_mode"] = RepeatMode.to_string(result["playlist_repeat"])
 
             # Current track info
-            current_track = {}
+            current_track: TrackDict = {}
+
             if "playlist_loop" in result and result["playlist_loop"]:
                 track = result["playlist_loop"][0]
                 # Copy all available track info
@@ -269,6 +325,7 @@ class SqueezeJsonClient:
                     elif key == "artwork_url":
                         current_track["artwork"] = value
                     else:
+                        # Store other track fields directly
                         current_track[key] = value
 
                 # Add track position if available
@@ -281,6 +338,7 @@ class SqueezeJsonClient:
             if "playlist_loop" in result:
                 status["playlist"] = result["playlist_loop"]
 
+            # Return the status dictionary
             return status
 
         except (ConnectionError, APIError, ParseError):
