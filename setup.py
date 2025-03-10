@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Setup script for the Squeeze package."""
 
+import re
+
 from setuptools import find_packages, setup
 
-# Use a static version instead of importing from the package
-VERSION = "0.3.0"
+# Get the version from __init__.py to avoid duplication
+with open("squeeze/__init__.py", encoding="utf-8") as f:
+    version_match = re.search(r'__version__\s*=\s*["\']([^"\']+)["\']', f.read())
+    if not version_match:
+        raise RuntimeError("Version string not found in __init__.py")
+    VERSION = version_match.group(1)
 
 setup(
     name="squeeze",
