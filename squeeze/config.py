@@ -3,10 +3,10 @@ Configuration module for Squeeze CLI.
 """
 
 import os
+import tomllib  # Standard library in Python 3.11+
 from typing import Any
 
-import tomli
-import tomli_w
+import tomli_w  # Still needed for writing TOML files
 
 DEFAULT_CONFIG = {"server": {"url": "http://localhost:9000"}}
 
@@ -33,7 +33,7 @@ def load_config() -> dict[str, Any]:
 
     try:
         with open(config_path, "rb") as f:
-            return tomli.load(f)
+            return tomllib.load(f)
     except Exception:
         return DEFAULT_CONFIG.copy()
 
