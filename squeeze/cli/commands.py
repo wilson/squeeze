@@ -375,11 +375,6 @@ def volume_command(args: ArgsDict) -> None:
         print("Error: Volume is required", file=sys.stderr)
         sys.exit(1)
 
-    # Debug mode no longer supported as it was HTML client specific
-    if args.get("debug"):
-        print("Debug volume controls no longer supported in v0.3.0", file=sys.stderr)
-        return
-
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)

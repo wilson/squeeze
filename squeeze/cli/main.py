@@ -150,9 +150,6 @@ def create_parser() -> argparse.ArgumentParser:
         help="Disable interactive player selection",
     )
     volume_parser.add_argument(
-        "--debug", action="store_true", help="Debug volume controls"
-    )
-    volume_parser.add_argument(
         "--debug-command", action="store_true", help="Debug command URL"
     )
 
