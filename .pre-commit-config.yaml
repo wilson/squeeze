@@ -31,5 +31,5 @@ repos:
     rev: v1.8.0
     hooks:
     -   id: mypy
-        additional_dependencies: [types-requests, pytest, tomli, tomli-w]
+        additional_dependencies: [types-setuptools, pytest-mypy, tomli, tomli-w]
         args: ["--config-file=pyproject.toml"]

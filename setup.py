@@ -31,6 +31,7 @@ setup(
         "dev": [
             "pytest>=6.0.0",
             "pytest-cov>=6.0.0",
+            "pytest-mypy>=0.10.0",
             "black",
             "isort",
             "mypy",
