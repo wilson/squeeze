@@ -64,6 +64,18 @@ def create_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
+    # Server commands (first group - server-related)
+    subparsers.add_parser("server", help="Get server status information")
+
+    # Config command
+    config_parser = subparsers.add_parser("config", help="Manage configuration")
+    config_parser.add_argument(
+        "--set-server", help="Set SqueezeBox server URL in config"
+    )
+
+    # Players command
+    subparsers.add_parser("players", help="List available players")
+
     # Status command
     status_parser = subparsers.add_parser("status", help="Show player status")
     status_parser.add_argument(
@@ -87,8 +99,19 @@ def create_parser() -> argparse.ArgumentParser:
         help="Live mode - continuously display player status with updates",
     )
 
-    # Players command
-    subparsers.add_parser("players", help="List available players")
+    # Search command
+    search_parser = subparsers.add_parser(
+        "search", help="Search for music in the library"
+    )
+    search_parser.add_argument("term", help="Search term")
+    search_parser.add_argument(
+        "--type",
+        choices=["all", "artists", "albums", "tracks"],
+        default="all",
+        help="Type of items to search for",
+    )
+
+    # === Playback Control Commands ===
 
     # Play command
     play_parser = subparsers.add_parser("play", help="Send play command to a player")
@@ -144,62 +167,6 @@ def create_parser() -> argparse.ArgumentParser:
         help="Disable interactive player selection",
     )
 
-    # Volume command
-    volume_parser = subparsers.add_parser("volume", help="Set volume for a player")
-    volume_parser.add_argument("volume", help="Volume level (0-100)")
-    volume_parser.add_argument(
-        "player_id", nargs="?", help="ID of the player to set volume for"
-    )
-    volume_parser.add_argument(
-        "--interactive",
-        action="store_true",
-        dest="interactive",
-        help="Use interactive player selection (default when TTY available)",
-    )
-    volume_parser.add_argument(
-        "--no-interactive",
-        action="store_true",
-        dest="no_interactive",
-        help="Disable interactive player selection",
-    )
-    volume_parser.add_argument(
-        "--debug-command", action="store_true", help="Debug command URL"
-    )
-
-    # Power command
-    power_parser = subparsers.add_parser("power", help="Set power state for a player")
-    power_parser.add_argument("state", choices=["on", "off"], help="Power state")
-    power_parser.add_argument(
-        "player_id", nargs="?", help="ID of the player to set power state for"
-    )
-    power_parser.add_argument(
-        "--interactive",
-        action="store_true",
-        dest="interactive",
-        help="Use interactive player selection (default when TTY available)",
-    )
-    power_parser.add_argument(
-        "--no-interactive",
-        action="store_true",
-        dest="no_interactive",
-        help="Disable interactive player selection",
-    )
-
-    # Search command
-    search_parser = subparsers.add_parser(
-        "search", help="Search for music in the library"
-    )
-    search_parser.add_argument("term", help="Search term")
-    search_parser.add_argument(
-        "--type",
-        choices=["all", "artists", "albums", "tracks"],
-        default="all",
-        help="Type of items to search for",
-    )
-
-    # Server command
-    subparsers.add_parser("server", help="Get server status information")
-
     # Next track command
     next_parser = subparsers.add_parser("next", help="Skip to next track")
     next_parser.add_argument(
@@ -242,6 +209,32 @@ def create_parser() -> argparse.ArgumentParser:
         help="Position threshold in seconds (default 5): if track position > threshold, restart current track; otherwise go to previous track",
     )
 
+    # Seek command
+    seek_parser = subparsers.add_parser(
+        "seek", help="Seek to a specific position in the current track"
+    )
+    seek_parser.add_argument(
+        "position", help="Position to seek to (seconds or MM:SS format)"
+    )
+    seek_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to send command to"
+    )
+    seek_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Use interactive player selection (default when TTY available)",
+    )
+    seek_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Disable interactive player selection",
+    )
+    seek_parser.add_argument(
+        "--debug-command", action="store_true", help="Debug command URL"
+    )
+
     # Jump to track command
     jump_parser = subparsers.add_parser(
         "jump", help="Jump to a specific track in the playlist"
@@ -263,28 +256,47 @@ def create_parser() -> argparse.ArgumentParser:
         help="Disable interactive player selection",
     )
 
-    # Now Playing command
-    now_playing_parser = subparsers.add_parser(
-        "now",
-        help="Show Now Playing screen on the player (mimics remote control button)",
+    # === Playback Settings Commands ===
+
+    # Volume command
+    volume_parser = subparsers.add_parser("volume", help="Set volume for a player")
+    volume_parser.add_argument("volume", help="Volume level (0-100)")
+    volume_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to set volume for"
     )
-    now_playing_parser.add_argument(
-        "player_id", nargs="?", help="ID of the player to send command to"
-    )
-    now_playing_parser.add_argument(
+    volume_parser.add_argument(
         "--interactive",
         action="store_true",
         dest="interactive",
         help="Use interactive player selection (default when TTY available)",
     )
-    now_playing_parser.add_argument(
+    volume_parser.add_argument(
         "--no-interactive",
         action="store_true",
         dest="no_interactive",
         help="Disable interactive player selection",
     )
-    now_playing_parser.add_argument(
+    volume_parser.add_argument(
         "--debug-command", action="store_true", help="Debug command URL"
+    )
+
+    # Power command
+    power_parser = subparsers.add_parser("power", help="Set power state for a player")
+    power_parser.add_argument("state", choices=["on", "off"], help="Power state")
+    power_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to set power state for"
+    )
+    power_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Use interactive player selection (default when TTY available)",
+    )
+    power_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Disable interactive player selection",
     )
 
     # Shuffle command
@@ -333,6 +345,32 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="no_interactive",
         help="Disable interactive player selection",
+    )
+
+    # === Display and Remote Control Commands ===
+
+    # Now Playing command
+    now_playing_parser = subparsers.add_parser(
+        "now",
+        help="Show Now Playing screen on the player (mimics remote control button)",
+    )
+    now_playing_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to send command to"
+    )
+    now_playing_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Use interactive player selection (default when TTY available)",
+    )
+    now_playing_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Disable interactive player selection",
+    )
+    now_playing_parser.add_argument(
+        "--debug-command", action="store_true", help="Debug command URL"
     )
 
     # Remote control button command
@@ -384,38 +422,6 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="no_interactive",
         help="Disable interactive player selection",
-    )
-
-    # Seek command
-    seek_parser = subparsers.add_parser(
-        "seek", help="Seek to a specific position in the current track"
-    )
-    seek_parser.add_argument(
-        "position", help="Position to seek to (seconds or MM:SS format)"
-    )
-    seek_parser.add_argument(
-        "player_id", nargs="?", help="ID of the player to send command to"
-    )
-    seek_parser.add_argument(
-        "--interactive",
-        action="store_true",
-        dest="interactive",
-        help="Use interactive player selection (default when TTY available)",
-    )
-    seek_parser.add_argument(
-        "--no-interactive",
-        action="store_true",
-        dest="no_interactive",
-        help="Disable interactive player selection",
-    )
-    seek_parser.add_argument(
-        "--debug-command", action="store_true", help="Debug command URL"
-    )
-
-    # Config command
-    config_parser = subparsers.add_parser("config", help="Manage configuration")
-    config_parser.add_argument(
-        "--set-server", help="Set SqueezeBox server URL in config"
     )
 
     return parser
