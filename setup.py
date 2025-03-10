@@ -26,6 +26,7 @@ setup(
     ],
     package_data={
         "squeeze": ["py.typed"],  # Indicate the package is typed
+        "tests": ["py.typed"],  # Also mark tests as typed
     },
     extras_require={
         "dev": [

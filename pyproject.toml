@@ -12,9 +12,16 @@ line_length = 88
 
 [tool.mypy]
 python_version = "3.11"
-# Enable all strict mode options
+# Enable all strict mode options plus additional strictness flags
 strict = true
-# Explicitly set key type checking flags
+
+# Additional strictness flags that go beyond --strict
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+no_implicit_reexport = true
+no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
@@ -22,16 +29,8 @@ warn_return_any = true
 warn_unreachable = true
 
 # We use proper type stubs where available and confirm packages have py.typed
-# No overrides needed for tomli and tomli_w - they both have py.typed files
-
-# Treat test files less strictly
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-disallow_untyped_decorators = false
-warn_return_any = false
-disable_error_code = ["misc", "assignment"]
+# tomli and tomli_w both include py.typed files and don't need overrides
+# All code including tests uses the same strict type checking
 
 [tool.pytest.ini_options]
 minversion = "6.0"

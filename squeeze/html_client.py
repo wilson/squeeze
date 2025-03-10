@@ -101,7 +101,8 @@ class SqueezeHtmlClient:
 
         try:
             with urllib.request.urlopen(url) as response:
-                return response.read()  # type: ignore
+                result: bytes = response.read()
+                return result
         except urllib.error.HTTPError as e:
             try:
                 response_body = e.read().decode("utf-8")

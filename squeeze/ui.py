@@ -67,6 +67,8 @@ def curses_select_player(players: list[dict[str, str]]) -> str | None:
     curses.cbreak()
     stdscr.keypad(True)
 
+    # We'll track the result separately to avoid returning from finally
+    result: str | None = None
     try:
         curses.start_color()
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)  # Selected item
@@ -119,18 +121,20 @@ def curses_select_player(players: list[dict[str, str]]) -> str | None:
             elif key == curses.KEY_DOWN:
                 selected_idx = (selected_idx + 1) % len(players)
             elif key == ord("\n"):  # Enter key
-                return players[selected_idx]["id"]
+                result = players[selected_idx]["id"]
+                break
             elif key == ord("q"):
-                return None
+                result = None
+                break
 
     finally:
-        # Clean up curses
+        # Clean up curses properly
         curses.nocbreak()
         stdscr.keypad(False)
         curses.echo()
         curses.endwin()
 
-    return None
+    return result
 
 
 def select_player(players: list[dict[str, str]]) -> str | None:

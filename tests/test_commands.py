@@ -1,5 +1,6 @@
 """Tests for the squeeze CLI commands."""
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from pytest import mark
@@ -78,8 +79,8 @@ def test_get_player_id_no_player_found(mock_json_client: MagicMock) -> None:
 )
 def test_display_command(
     command: str,
-    args: dict,
-    expected_params: list,
+    args: dict[str, Any],
+    expected_params: list[str],
     mock_json_client: MagicMock,
     player_id: str,
 ) -> None:

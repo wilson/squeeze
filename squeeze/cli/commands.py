@@ -4,6 +4,7 @@ CLI commands for Squeeze.
 
 import json
 import sys
+from typing import Any
 
 from squeeze.client_factory import create_client
 from squeeze.config import get_server_url, load_config, save_config
@@ -22,8 +23,11 @@ from squeeze.ui import select_player
 # Type alias for either client type
 ClientType = SqueezeHtmlClient | SqueezeJsonClient
 
+# Type alias for command arguments
+ArgsDict = dict[str, Any]
 
-def status_command(args: dict) -> None:
+
+def status_command(args: ArgsDict) -> None:
     """Show status of a player.
 
     Args:
@@ -236,7 +240,7 @@ def format_time(seconds: int) -> str:
         return f"{minutes}:{seconds:02d}"
 
 
-def players_command(args: dict) -> None:
+def players_command(args: ArgsDict) -> None:
     """List available players.
 
     Args:
@@ -261,7 +265,7 @@ def players_command(args: dict) -> None:
         sys.exit(1)
 
 
-def get_player_id(args: dict, client: ClientType) -> str | None:
+def get_player_id(args: ArgsDict, client: ClientType) -> str | None:
     """Get player ID from arguments or interactive selection.
 
     Args:
@@ -306,7 +310,7 @@ def get_player_id(args: dict, client: ClientType) -> str | None:
     return player_id
 
 
-def play_command(args: dict) -> None:
+def play_command(args: ArgsDict) -> None:
     """Send play command to a player.
 
     Args:
@@ -328,7 +332,7 @@ def play_command(args: dict) -> None:
         sys.exit(1)
 
 
-def pause_command(args: dict) -> None:
+def pause_command(args: ArgsDict) -> None:
     """Send pause command to a player.
 
     Args:
@@ -350,7 +354,7 @@ def pause_command(args: dict) -> None:
         sys.exit(1)
 
 
-def stop_command(args: dict) -> None:
+def stop_command(args: ArgsDict) -> None:
     """Send stop command to a player.
 
     Args:
@@ -372,7 +376,7 @@ def stop_command(args: dict) -> None:
         sys.exit(1)
 
 
-def volume_command(args: dict) -> None:
+def volume_command(args: ArgsDict) -> None:
     """Set volume for a player.
 
     Args:
@@ -433,7 +437,7 @@ def volume_command(args: dict) -> None:
         sys.exit(1)
 
 
-def power_command(args: dict) -> None:
+def power_command(args: ArgsDict) -> None:
     """Set power state for a player.
 
     Args:
@@ -463,7 +467,7 @@ def power_command(args: dict) -> None:
         sys.exit(1)
 
 
-def search_command(args: dict) -> None:
+def search_command(args: ArgsDict) -> None:
     """Search for music in the library.
 
     Args:
@@ -488,38 +492,61 @@ def search_command(args: dict) -> None:
     try:
         if search_type in ["all", "artists"]:
             print("Artists matching:", search_term)
-            artists = client.get_artists(search=search_term)  # type: ignore
-            for artist in artists[:10]:  # Limit to 10 results
-                print(f"  {artist.get('artist')}")
-            if len(artists) > 10:
-                print(f"  ... and {len(artists) - 10} more")
+            # Check if the client has the get_artists method
+            if hasattr(client, "get_artists"):
+                # We know client is a JSON client if it has get_artists
+                from squeeze.json_client import SqueezeJsonClient
+
+                json_client = client
+                if isinstance(json_client, SqueezeJsonClient):
+                    artists = json_client.get_artists(search=search_term)
+                    for artist in artists[:10]:  # Limit to 10 results
+                        print(f"  {artist.get('artist')}")
+                    if len(artists) > 10:
+                        print(f"  ... and {len(artists) - 10} more")
             print()
 
         if search_type in ["all", "albums"]:
             print("Albums matching:", search_term)
-            albums = client.get_albums(search=search_term)  # type: ignore
-            for album in albums[:10]:  # Limit to 10 results
-                print(f"  {album.get('album')} by {album.get('artist', 'Unknown')}")
-            if len(albums) > 10:
-                print(f"  ... and {len(albums) - 10} more")
+            # Check if the client has the get_albums method
+            if hasattr(client, "get_albums"):
+                # We know client is a JSON client if it has get_albums
+                from squeeze.json_client import SqueezeJsonClient
+
+                json_client = client
+                if isinstance(json_client, SqueezeJsonClient):
+                    albums = json_client.get_albums(search=search_term)
+                    for album in albums[:10]:  # Limit to 10 results
+                        print(
+                            f"  {album.get('album')} by {album.get('artist', 'Unknown')}"
+                        )
+                    if len(albums) > 10:
+                        print(f"  ... and {len(albums) - 10} more")
             print()
 
         if search_type in ["all", "tracks"]:
             print("Tracks matching:", search_term)
-            tracks = client.get_tracks(search=search_term)  # type: ignore
-            for track in tracks[:10]:  # Limit to 10 results
-                print(
-                    f"  {track.get('title')} by {track.get('artist', 'Unknown')} on {track.get('album', 'Unknown')}"
-                )
-            if len(tracks) > 10:
-                print(f"  ... and {len(tracks) - 10} more")
+            # Check if the client has the get_tracks method
+            if hasattr(client, "get_tracks"):
+                # We know client is a JSON client if it has get_tracks
+                from squeeze.json_client import SqueezeJsonClient
+
+                json_client = client
+                if isinstance(json_client, SqueezeJsonClient):
+                    tracks = json_client.get_tracks(search=search_term)
+                    for track in tracks[:10]:  # Limit to 10 results
+                        print(
+                            f"  {track.get('title')} by {track.get('artist', 'Unknown')} on {track.get('album', 'Unknown')}"
+                        )
+                    if len(tracks) > 10:
+                        print(f"  ... and {len(tracks) - 10} more")
 
     except Exception as e:
         print(f"Error searching: {e}", file=sys.stderr)
         sys.exit(1)
 
 
-def config_command(args: dict) -> None:
+def config_command(args: ArgsDict) -> None:
     """Manage configuration.
 
     Args:
@@ -540,7 +567,7 @@ def config_command(args: dict) -> None:
     print(f"Server URL set to {server_url}")
 
 
-def server_command(args: dict) -> None:
+def server_command(args: ArgsDict) -> None:
     """Get server status information.
 
     Args:
@@ -570,7 +597,7 @@ def server_command(args: dict) -> None:
         sys.exit(1)
 
     try:
-        status = client.get_server_status()  # type: ignore
+        status = client.get_server_status()
 
         # Print basic server information
         print("Server Information:")
@@ -606,7 +633,7 @@ def server_command(args: dict) -> None:
         sys.exit(1)
 
 
-def next_command(args: dict) -> None:
+def next_command(args: ArgsDict) -> None:
     """Send next track command to a player.
 
     Args:
@@ -628,7 +655,7 @@ def next_command(args: dict) -> None:
         sys.exit(1)
 
 
-def jump_command(args: dict) -> None:
+def jump_command(args: ArgsDict) -> None:
     """Jump to a specific track in the playlist.
 
     Args:
@@ -665,7 +692,7 @@ def jump_command(args: dict) -> None:
         sys.exit(1)
 
 
-def prev_command(args: dict) -> None:
+def prev_command(args: ArgsDict) -> None:
     """Send previous track command to a player.
 
     Mimics the behavior of remote controls:
@@ -737,7 +764,7 @@ def prev_command(args: dict) -> None:
         sys.exit(1)
 
 
-def now_playing_command(args: dict) -> None:
+def now_playing_command(args: ArgsDict) -> None:
     """Show Now Playing screen on a player.
 
     This mimics pressing the Now Playing button on the official remote control,
@@ -763,7 +790,7 @@ def now_playing_command(args: dict) -> None:
         sys.exit(1)
 
 
-def shuffle_command(args: dict) -> None:
+def shuffle_command(args: ArgsDict) -> None:
     """Set or cycle through shuffle modes.
 
     Supported modes:
@@ -827,7 +854,7 @@ def shuffle_command(args: dict) -> None:
         sys.exit(1)
 
 
-def repeat_command(args: dict) -> None:
+def repeat_command(args: ArgsDict) -> None:
     """Set or cycle through repeat modes.
 
     Supported modes:
@@ -898,7 +925,7 @@ def repeat_command(args: dict) -> None:
         sys.exit(1)
 
 
-def remote_command(args: dict) -> None:
+def remote_command(args: ArgsDict) -> None:
     """Send a remote control button press to a player.
 
     Simulates pressing a button on the physical SqueezeBox remote control.
@@ -952,7 +979,7 @@ def remote_command(args: dict) -> None:
         sys.exit(1)
 
 
-def display_command(args: dict) -> None:
+def display_command(args: ArgsDict) -> None:
     """Display a message on a player's screen.
 
     This sends a custom message to the player's display. The message can include
@@ -1017,7 +1044,7 @@ def display_command(args: dict) -> None:
         sys.exit(1)
 
 
-def seek_command(args: dict) -> None:
+def seek_command(args: ArgsDict) -> None:
     """Seek to a specific position in the current track.
 
     Args:
