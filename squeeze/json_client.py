@@ -190,7 +190,15 @@ class SqueezeJsonClient:
         """
         try:
             # Build parameters for the status command
-            params = ["-", 1, "tags:abcdeilNortuK"]  # Extended tag set for more info
+            # Include important metadata tags:
+            # a=artist, b=?, c=coverid, d=duration, e=album_id, i=disc, j=coverart, l=album,
+            # m=bpm, N=remote_title, o=type, r=bitrate, t=tracknum, u=url, K=artwork_url,
+            # R=rating, Y=replay_gain
+            params = [
+                "-",
+                1,
+                "tags:abcdeilmNortuKRYj",
+            ]  # Extended tag set for more info
 
             # Add subscribe parameter if requested
             if subscribe:

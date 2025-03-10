@@ -127,7 +127,12 @@ def test_get_player_status(json_client: SqueezeJsonClient) -> None:
 
         # Verify the request was made correctly - should include subscribe:0
         mock_send_request.assert_called_once_with(
-            "00:11:22:33:44:55", "status", "-", 1, "tags:abcdeilNortuK", "subscribe:0"
+            "00:11:22:33:44:55",
+            "status",
+            "-",
+            1,
+            "tags:abcdeilmNortuKRYj",
+            "subscribe:0",
         )
 
         # Reset the mock and test with subscribe=True
@@ -136,7 +141,12 @@ def test_get_player_status(json_client: SqueezeJsonClient) -> None:
 
         # Verify the request included subscribe:1
         mock_send_request.assert_called_once_with(
-            "00:11:22:33:44:55", "status", "-", 1, "tags:abcdeilNortuK", "subscribe:1"
+            "00:11:22:33:44:55",
+            "status",
+            "-",
+            1,
+            "tags:abcdeilmNortuKRYj",
+            "subscribe:1",
         )
 
 
