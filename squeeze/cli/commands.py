@@ -796,6 +796,7 @@ def remote_command(args: dict) -> None:
     - left: Move left in menu or go back
     - right: Move right in menu or go forward
     - select: Select current menu item (also called 'center' or 'ok')
+    - browse: Enter music library browse mode
 
     Args:
         args: Command-line arguments
@@ -817,6 +818,7 @@ def remote_command(args: dict) -> None:
         "left": "left",
         "right": "right",
         "select": "center",  # Also known as "ok" or "enter"
+        "browse": "browse",  # Browse music library
     }
 
     if button not in button_map:

@@ -130,6 +130,9 @@ squeeze remote right [player_id]
 
 # Select/OK button
 squeeze remote select [player_id]
+
+# Browse music library
+squeeze remote browse [player_id]
 ```
 
 Note: Square brackets `[]` indicate optional parameters. If omitted, you'll get an interactive player selection.

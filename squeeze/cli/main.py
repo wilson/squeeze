@@ -345,7 +345,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     remote_parser.add_argument(
         "button",
-        choices=["up", "down", "left", "right", "select"],
+        choices=["up", "down", "left", "right", "select", "browse"],
         help="Button to press",
     )
     remote_parser.add_argument(
