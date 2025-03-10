@@ -4,6 +4,7 @@ CLI commands for Squeeze.
 
 import json
 import sys
+from collections.abc import Callable
 from typing import Any
 
 from squeeze.client_factory import create_client
@@ -24,6 +25,136 @@ ClientType = SqueezeJsonClient
 
 # Type alias for command arguments
 ArgsDict = dict[str, Any]
+
+
+def display_progress_bar(position: int, duration: int) -> None:
+    """Display a progress bar for track position.
+
+    Args:
+        position: Current position in seconds
+        duration: Total duration in seconds
+    """
+    if position is None or duration is None or duration <= 0:
+        return
+
+    progress = min(1.0, position / duration)
+    bar_width = 40
+    filled_width = int(bar_width * progress)
+    bar = "█" * filled_width + "░" * (bar_width - filled_width)
+    percent = int(progress * 100)
+    print(f"  Progress: {bar} {percent}%")
+
+
+def print_player_status(
+    status: dict[str, Any], show_all_track_fields: bool = False
+) -> None:
+    """Format and print player status information.
+
+    Args:
+        status: Player status dictionary
+        show_all_track_fields: Whether to display all track fields or only priority ones
+    """
+    # Basic player information
+    print(f"Player: {status['player_name']} ({status['player_id']})")
+    print(f"Power: {status['power']}")
+    print(f"Status: {status['status']}")
+    if status["volume"] is not None:
+        print(f"Volume: {status['volume']}")
+
+    # Print shuffle and repeat if available
+    if "shuffle_mode" in status:
+        print(f"Shuffle: {status['shuffle_mode']}")
+    if "repeat_mode" in status:
+        print(f"Repeat: {status['repeat_mode']}")
+
+    # Print playlist info if available
+    if "playlist_count" in status and status["playlist_count"] > 0:
+        position = (
+            status.get("playlist_position", 0) + 1
+        )  # Convert to 1-based for display
+        count = status["playlist_count"]
+        print(f"Playlist: {position} of {count}")
+
+    # Display current track information
+    current_track = status["current_track"]
+    if current_track and isinstance(current_track, dict):
+        print("\nCurrent track:")
+        # Priority order for fields
+        priority_fields = [
+            "title",
+            "artist",
+            "album",
+            "position",
+            "duration",
+            "artwork",
+        ]
+
+        # First print priority fields in order
+        for field in priority_fields:
+            if field in current_track:
+                # Format position and duration as time if needed
+                if field == "position" or field == "duration":
+                    value = format_time(current_track[field])
+                else:
+                    value = current_track[field]
+                print(f"  {field.capitalize()}: {value}")
+
+        # Show progress bar if position and duration are available
+        if "position" in current_track and "duration" in current_track:
+            display_progress_bar(current_track["position"], current_track["duration"])
+
+        # Then print any remaining fields if requested
+        if show_all_track_fields:
+            for key, value in current_track.items():
+                if key not in priority_fields:
+                    print(f"  {key.capitalize()}: {value}")
+
+
+def display_live_status(client: ClientType, player_id: str) -> None:
+    """Display continuously updating status in live mode.
+
+    Args:
+        client: Squeeze client instance
+        player_id: ID of the player to get status for
+    """
+    print("Live status mode. Press Ctrl+C to exit.")
+    print()
+
+    try:
+        while True:
+            try:
+                # Use subscribe mode to get updates
+                status = client.get_player_status(player_id, subscribe=True)
+
+                # Clear the screen for a cleaner display
+                # We can't use os.system('clear') because it's not portable
+                print("\033[H\033[J", end="")  # ANSI escape code to clear screen
+
+                # Print timestamp
+                from datetime import datetime
+
+                print(
+                    f"Status as of {datetime.now().strftime('%H:%M:%S')} (Ctrl+C to exit)"
+                )
+                print()
+
+                # Print the status information
+                print_player_status(status)
+
+                # Sleep briefly to handle cases where server doesn't support subscribe mode
+                import time
+
+                time.sleep(0.1)
+
+            except (ConnectionError, APIError, ParseError, CommandError) as e:
+                print(f"Error in live mode: {e}", file=sys.stderr)
+                # In live mode, just print the error and continue
+                import time
+
+                time.sleep(5)  # Wait a bit before retrying
+
+    except KeyboardInterrupt:
+        print("\nExiting live mode.")
 
 
 def status_command(args: ArgsDict) -> None:
@@ -50,159 +181,14 @@ def status_command(args: ArgsDict) -> None:
         print(f"Error getting player ID: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # For live mode, we need to handle interrupts gracefully
+    # Handle live mode vs. one-time status display
     if live_mode:
-        try:
-            print("Live status mode. Press Ctrl+C to exit.")
-            print()
-            while True:
-                try:
-                    # Use subscribe mode to get updates
-                    status = client.get_player_status(player_id, subscribe=True)
-
-                    # Clear the screen for a cleaner display
-                    # We can't use os.system('clear') because it's not portable
-                    print("\033[H\033[J", end="")  # ANSI escape code to clear screen
-
-                    # Print timestamp
-                    from datetime import datetime
-
-                    print(
-                        f"Status as of {datetime.now().strftime('%H:%M:%S')} (Ctrl+C to exit)"
-                    )
-                    print()
-
-                    # Format and print status
-                    print(f"Player: {status['player_name']} ({status['player_id']})")
-                    print(f"Power: {status['power']}")
-                    print(f"Status: {status['status']}")
-                    if status["volume"] is not None:
-                        print(f"Volume: {status['volume']}")
-
-                    # Print shuffle and repeat if available
-                    if "shuffle_mode" in status:
-                        print(f"Shuffle: {status['shuffle_mode']}")
-                    if "repeat_mode" in status:
-                        print(f"Repeat: {status['repeat_mode']}")
-
-                    # Print playlist info if available
-                    if "playlist_count" in status and status["playlist_count"] > 0:
-                        position = (
-                            status.get("playlist_position", 0) + 1
-                        )  # Convert to 1-based for display
-                        count = status["playlist_count"]
-                        print(f"Playlist: {position} of {count}")
-
-                    current_track = status["current_track"]
-                    if current_track and isinstance(current_track, dict):
-                        print("\nCurrent track:")
-                        # Priority order for fields
-                        priority_fields = [
-                            "title",
-                            "artist",
-                            "album",
-                            "position",
-                            "duration",
-                            "artwork",
-                        ]
-
-                        # First print priority fields in order
-                        for field in priority_fields:
-                            if field in current_track:
-                                # Format position and duration as time if needed
-                                if field == "position" or field == "duration":
-                                    value = format_time(current_track[field])
-                                else:
-                                    value = current_track[field]
-                                print(f"  {field.capitalize()}: {value}")
-
-                        # Show progress bar for position if both position and duration are available
-                        if "position" in current_track and "duration" in current_track:
-                            position = current_track["position"]
-                            duration = current_track["duration"]
-                            if (
-                                position is not None
-                                and duration is not None
-                                and duration > 0
-                            ):
-                                progress = min(1.0, position / duration)
-                                bar_width = 40
-                                filled_width = int(bar_width * progress)
-                                bar = "█" * filled_width + "░" * (
-                                    bar_width - filled_width
-                                )
-                                percent = int(progress * 100)
-                                print(f"  Progress: {bar} {percent}%")
-
-                    # Sleep briefly to handle cases where server doesn't support subscribe mode
-                    import time
-
-                    time.sleep(0.1)
-
-                except (ConnectionError, APIError, ParseError, CommandError) as e:
-                    print(f"Error in live mode: {e}", file=sys.stderr)
-                    # In live mode, just print the error and continue
-                    import time
-
-                    time.sleep(5)  # Wait a bit before retrying
-
-        except KeyboardInterrupt:
-            print("\nExiting live mode.")
-            return
+        display_live_status(client, player_id)
     else:
-        # Single status display (not live mode)
+        # Single status display
         try:
             status = client.get_player_status(player_id)
-
-            # Format and print status
-            print(f"Player: {status['player_name']} ({status['player_id']})")
-            print(f"Power: {status['power']}")
-            print(f"Status: {status['status']}")
-            if status["volume"] is not None:
-                print(f"Volume: {status['volume']}")
-
-            # Print shuffle and repeat if available
-            if "shuffle_mode" in status:
-                print(f"Shuffle: {status['shuffle_mode']}")
-            if "repeat_mode" in status:
-                print(f"Repeat: {status['repeat_mode']}")
-
-            # Print playlist info if available
-            if "playlist_count" in status and status["playlist_count"] > 0:
-                position = (
-                    status.get("playlist_position", 0) + 1
-                )  # Convert to 1-based for display
-                count = status["playlist_count"]
-                print(f"Playlist: {position} of {count}")
-
-            current_track = status["current_track"]
-            if current_track and isinstance(current_track, dict):
-                print("\nCurrent track:")
-                # Priority order for fields
-                priority_fields = [
-                    "title",
-                    "artist",
-                    "album",
-                    "position",
-                    "duration",
-                    "artwork",
-                ]
-
-                # First print priority fields in order
-                for field in priority_fields:
-                    if field in current_track:
-                        # Format position and duration as time if needed
-                        if field == "position" or field == "duration":
-                            value = format_time(current_track[field])
-                        else:
-                            value = current_track[field]
-                        print(f"  {field.capitalize()}: {value}")
-
-                # Then print any remaining fields
-                for key, value in current_track.items():
-                    if key not in priority_fields:
-                        print(f"  {key.capitalize()}: {value}")
-
+            print_player_status(status, show_all_track_fields=True)
         except (ConnectionError, APIError, ParseError, CommandError) as e:
             print(f"Error getting player status: {e}", file=sys.stderr)
             sys.exit(1)
@@ -428,6 +414,24 @@ def power_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
+def display_search_results(
+    items: list[dict[str, Any]], formatter: Callable[[dict[str, Any]], str]
+) -> None:
+    """Display search results with consistent formatting.
+
+    Args:
+        items: List of items to display
+        formatter: Function to format each item for display
+    """
+    max_display = 10
+    for item in items[:max_display]:
+        print(f"  {formatter(item)}")
+
+    if len(items) > max_display:
+        print(f"  ... and {len(items) - max_display} more")
+    print()
+
+
 def search_command(args: ArgsDict) -> None:
     """Search for music in the library.
 
@@ -449,57 +453,29 @@ def search_command(args: ArgsDict) -> None:
 
     search_type = args.get("type", "all")
 
+    # Define formatters for each result type
+    formatters = {
+        "artists": lambda artist: f"{artist.get('artist')}",
+        "albums": lambda album: f"{album.get('album')} by {album.get('artist', 'Unknown')}",
+        "tracks": lambda track: f"{track.get('title')} by {track.get('artist', 'Unknown')} on {track.get('album', 'Unknown')}",
+    }
+
     try:
-        if search_type in ["all", "artists"]:
-            print("Artists matching:", search_term)
-            # Check if the client has the get_artists method
-            if hasattr(client, "get_artists"):
-                # We know client is a JSON client if it has get_artists
-                from squeeze.json_client import SqueezeJsonClient
+        # For each type of search, fetch and display results
+        for item_type, formatter in formatters.items():
+            if search_type not in ["all", item_type]:
+                continue
 
-                json_client = client
-                if isinstance(json_client, SqueezeJsonClient):
-                    artists = json_client.get_artists(search=search_term)
-                    for artist in artists[:10]:  # Limit to 10 results
-                        print(f"  {artist.get('artist')}")
-                    if len(artists) > 10:
-                        print(f"  ... and {len(artists) - 10} more")
-            print()
+            print(f"{item_type.capitalize()} matching: {search_term}")
 
-        if search_type in ["all", "albums"]:
-            print("Albums matching:", search_term)
-            # Check if the client has the get_albums method
-            if hasattr(client, "get_albums"):
-                # We know client is a JSON client if it has get_albums
-                from squeeze.json_client import SqueezeJsonClient
-
-                json_client = client
-                if isinstance(json_client, SqueezeJsonClient):
-                    albums = json_client.get_albums(search=search_term)
-                    for album in albums[:10]:  # Limit to 10 results
-                        print(
-                            f"  {album.get('album')} by {album.get('artist', 'Unknown')}"
-                        )
-                    if len(albums) > 10:
-                        print(f"  ... and {len(albums) - 10} more")
-            print()
-
-        if search_type in ["all", "tracks"]:
-            print("Tracks matching:", search_term)
-            # Check if the client has the get_tracks method
-            if hasattr(client, "get_tracks"):
-                # We know client is a JSON client if it has get_tracks
-                from squeeze.json_client import SqueezeJsonClient
-
-                json_client = client
-                if isinstance(json_client, SqueezeJsonClient):
-                    tracks = json_client.get_tracks(search=search_term)
-                    for track in tracks[:10]:  # Limit to 10 results
-                        print(
-                            f"  {track.get('title')} by {track.get('artist', 'Unknown')} on {track.get('album', 'Unknown')}"
-                        )
-                    if len(tracks) > 10:
-                        print(f"  ... and {len(tracks) - 10} more")
+            # Get the appropriate method from the client
+            search_method = getattr(client, f"get_{item_type}", None)
+            if search_method:
+                results = search_method(search=search_term)
+                display_search_results(results, formatter)
+            else:
+                print(f"  Search for {item_type} not supported")
+                print()
 
     except Exception as e:
         print(f"Error searching: {e}", file=sys.stderr)
@@ -650,6 +626,60 @@ def jump_command(args: ArgsDict) -> None:
         sys.exit(1)
 
 
+def extract_track_position(status: dict[str, Any]) -> int:
+    """Extract current track position in seconds from player status.
+
+    Args:
+        status: Player status dictionary
+
+    Returns:
+        Current position in seconds
+    """
+    position = 0
+
+    # Try to get position directly from current_track
+    current_track = status.get("current_track", {})
+    if isinstance(current_track, dict) and "position" in current_track:
+        position = current_track["position"]
+        return position
+
+    # Extract position from status text (format like "2174 of 3562:")
+    status_text = status.get("status", "")
+    if isinstance(status_text, str) and "of" in status_text:
+        # Try to extract the position from status text
+        import re
+
+        match = re.search(r"(\d+)\s+of\s+(\d+)", status_text)
+        if match:
+            try:
+                position = int(match.group(1))
+                # Convert to seconds if position is in time units (e.g., milliseconds)
+                # This is a heuristic - if position is very large (>1000), assume it's in milliseconds
+                if position > 1000:
+                    position = position // 1000  # Convert to seconds
+            except (ValueError, IndexError):
+                position = 0
+
+    return position
+
+
+def restart_track(client: ClientType, player_id: str) -> None:
+    """Seek to the beginning of the current track.
+
+    Args:
+        client: Squeeze client instance
+        player_id: ID of the player
+
+    Raises:
+        Exception: If seeking fails
+    """
+    if hasattr(client, "seek_to_time"):
+        client.seek_to_time(player_id, 0, debug=False)
+    else:
+        # Simplified fallback - just use the 'time' command directly
+        client.send_command(player_id, "time", ["0"])
+
+
 def prev_command(args: ArgsDict) -> None:
     """Send previous track command to a player.
 
@@ -677,36 +707,12 @@ def prev_command(args: ArgsDict) -> None:
 
         # First check the current track position
         status = client.get_player_status(player_id)
-        position = 0
-
-        # Extract position from status text (format like "2174 of 3562:")
-        status_text = status.get("status", "")
-        if isinstance(status_text, str) and "of" in status_text:
-            # Try to extract the position from status text
-            import re
-
-            match = re.search(r"(\d+)\s+of\s+(\d+)", status_text)
-            if match:
-                try:
-                    position = int(match.group(1))
-                    # total is available but not used
-                    _ = int(match.group(2))
-                    # Convert to seconds if position is in time units (e.g., milliseconds)
-                    # This is a heuristic - if position is very large (>1000), assume it's in milliseconds
-                    if position > 1000:
-                        position = position // 1000  # Convert to seconds
-                except (ValueError, IndexError):
-                    position = 0
+        position = extract_track_position(status)
 
         # If we're past the threshold, go to the beginning of the current track
         if position > threshold:
             try:
-                # Use seek_to_time or direct time command
-                if hasattr(client, "seek_to_time"):
-                    client.seek_to_time(player_id, 0, debug=False)
-                else:
-                    # Simplified fallback - just use the 'time' command directly
-                    client.send_command(player_id, "time", ["0"])
+                restart_track(client, player_id)
                 print(f"Restarted current track for player {player_id}")
             except Exception as e:
                 print(f"Error seeking to start of track: {e}", file=sys.stderr)
