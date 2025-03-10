@@ -171,11 +171,14 @@ class SqueezeJsonClient:
             # Convert generic exceptions to APIError
             raise APIError(f"Failed to get players: {str(e)}")
 
-    def get_player_status(self, player_id: str) -> dict[str, Any]:
+    def get_player_status(
+        self, player_id: str, subscribe: bool = False
+    ) -> dict[str, Any]:
         """Get detailed status for a specific player.
 
         Args:
             player_id: ID of the player to get status for
+            subscribe: Whether to subscribe to status updates
 
         Returns:
             Dictionary containing player status information
@@ -186,14 +189,17 @@ class SqueezeJsonClient:
             ParseError: If the response cannot be parsed
         """
         try:
-            # Use the 'status' command to get player status with extended tags
-            response = self._send_request(
-                player_id,
-                "status",
-                "-",
-                1,
-                "tags:abcdeilNortuK",  # Extended tag set for more info
-            )
+            # Build parameters for the status command
+            params = ["-", 1, "tags:abcdeilNortuK"]  # Extended tag set for more info
+
+            # Add subscribe parameter if requested
+            if subscribe:
+                params.append("subscribe:1")
+            else:
+                params.append("subscribe:0")
+
+            # Use the 'status' command to get player status
+            response = self._send_request(player_id, "status", *params)
 
             if "result" not in response:
                 raise ParseError("Invalid response from server: missing 'result' field")
@@ -321,23 +327,12 @@ class SqueezeJsonClient:
             print(f"Debug: Seeking to {seconds} seconds for player {player_id}")
 
         try:
-            # Try using playlist jump command which is more reliable for restarting tracks
-            if seconds == 0:
-                self._send_request(player_id, "playlist", "jump", "0")
-            else:
-                self._send_request(player_id, "time", str(seconds))
+            # According to the API reference, 'time' is the command to seek within a track
+            # Simply send the time command with the seconds value
+            self._send_request(player_id, "time", str(seconds))
         except (ConnectionError, APIError, ParseError) as e:
-            # Try with the fallback method
-            try:
-                if seconds == 0:
-                    self._send_request(player_id, "time", "0")
-                else:
-                    self._send_request(player_id, "playlist", "index", "0")
-            except Exception as e2:
-                raise CommandError(
-                    f"{str(e)} (fallback also failed: {str(e2)})",
-                    command=f"seek to {seconds}",
-                )
+            # Re-raise with more context
+            raise CommandError(str(e), command=f"seek to {seconds}")
         except Exception as e:
             # Convert generic exceptions to CommandError
             raise CommandError(str(e), command=f"seek to {seconds}")

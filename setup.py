@@ -24,6 +24,17 @@ setup(
         "tomli-w>=1.0.0",
         # curses is part of the standard library for most Python installations
     ],
+    extras_require={
+        "dev": [
+            "pytest>=6.0.0",
+            "pytest-cov>=6.0.0",
+            "black",
+            "isort",
+            "mypy",
+            "ruff",
+            "types-setuptools",
+        ],
+    },
     python_requires=">=3.11",
     classifiers=[
         "Development Status :: 3 - Alpha",

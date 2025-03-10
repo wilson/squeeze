@@ -31,6 +31,7 @@ def status_command(args: dict) -> None:
     """
     server_url = get_server_url(args.get("server"))
     use_json = args.get("json", True)
+    live_mode = args.get("live", False)
 
     try:
         client = create_client(server_url, prefer_json=use_json)
@@ -47,64 +48,174 @@ def status_command(args: dict) -> None:
         print(f"Error getting player ID: {e}", file=sys.stderr)
         sys.exit(1)
 
-    try:
-        status = client.get_player_status(player_id)
-
-        # Format and print status
-        print(f"Player: {status['player_name']} ({status['player_id']})")
-        print(f"Power: {status['power']}")
-        print(f"Status: {status['status']}")
-        if status["volume"] is not None:
-            print(f"Volume: {status['volume']}")
-
-        # Print shuffle and repeat if available
-        if "shuffle_mode" in status:
-            print(f"Shuffle: {status['shuffle_mode']}")
-        if "repeat_mode" in status:
-            print(f"Repeat: {status['repeat_mode']}")
-
-        # Print playlist info if available
-        if "playlist_count" in status and status["playlist_count"] > 0:
-            position = (
-                status.get("playlist_position", 0) + 1
-            )  # Convert to 1-based for display
-            count = status["playlist_count"]
-            print(f"Playlist: {position} of {count}")
-
-        current_track = status["current_track"]
-        if current_track and isinstance(current_track, dict):
-            print("\nCurrent track:")
-            # Priority order for fields
-            priority_fields = [
-                "title",
-                "artist",
-                "album",
-                "position",
-                "duration",
-                "artwork",
-            ]
-
-            # First print priority fields in order
-            for field in priority_fields:
-                if field in current_track:
-                    # Format position and duration as time if needed
-                    if field == "position" or field == "duration":
-                        value = format_time(current_track[field])
+    # For live mode, we need to handle interrupts gracefully
+    if live_mode:
+        try:
+            print("Live status mode. Press Ctrl+C to exit.")
+            print()
+            while True:
+                try:
+                    # Use subscribe mode for JSON client to get updates
+                    if hasattr(client, "get_player_status") and isinstance(
+                        client, SqueezeJsonClient
+                    ):
+                        status = client.get_player_status(player_id, subscribe=True)
                     else:
-                        value = current_track[field]
-                    print(f"  {field.capitalize()}: {value}")
+                        # For HTML client, just poll regularly
+                        status = client.get_player_status(player_id)
 
-            # Then print any remaining fields
-            for key, value in current_track.items():
-                if key not in priority_fields:
-                    print(f"  {key.capitalize()}: {value}")
+                    # Clear the screen for a cleaner display
+                    # We can't use os.system('clear') because it's not portable
+                    print("\033[H\033[J", end="")  # ANSI escape code to clear screen
 
-    except (ConnectionError, APIError, ParseError, CommandError) as e:
-        print(f"Error getting player status: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Unexpected error: {e}", file=sys.stderr)
-        sys.exit(1)
+                    # Print timestamp
+                    from datetime import datetime
+
+                    print(
+                        f"Status as of {datetime.now().strftime('%H:%M:%S')} (Ctrl+C to exit)"
+                    )
+                    print()
+
+                    # Format and print status
+                    print(f"Player: {status['player_name']} ({status['player_id']})")
+                    print(f"Power: {status['power']}")
+                    print(f"Status: {status['status']}")
+                    if status["volume"] is not None:
+                        print(f"Volume: {status['volume']}")
+
+                    # Print shuffle and repeat if available
+                    if "shuffle_mode" in status:
+                        print(f"Shuffle: {status['shuffle_mode']}")
+                    if "repeat_mode" in status:
+                        print(f"Repeat: {status['repeat_mode']}")
+
+                    # Print playlist info if available
+                    if "playlist_count" in status and status["playlist_count"] > 0:
+                        position = (
+                            status.get("playlist_position", 0) + 1
+                        )  # Convert to 1-based for display
+                        count = status["playlist_count"]
+                        print(f"Playlist: {position} of {count}")
+
+                    current_track = status["current_track"]
+                    if current_track and isinstance(current_track, dict):
+                        print("\nCurrent track:")
+                        # Priority order for fields
+                        priority_fields = [
+                            "title",
+                            "artist",
+                            "album",
+                            "position",
+                            "duration",
+                            "artwork",
+                        ]
+
+                        # First print priority fields in order
+                        for field in priority_fields:
+                            if field in current_track:
+                                # Format position and duration as time if needed
+                                if field == "position" or field == "duration":
+                                    value = format_time(current_track[field])
+                                else:
+                                    value = current_track[field]
+                                print(f"  {field.capitalize()}: {value}")
+
+                        # Show progress bar for position if both position and duration are available
+                        if "position" in current_track and "duration" in current_track:
+                            position = current_track["position"]
+                            duration = current_track["duration"]
+                            if (
+                                position is not None
+                                and duration is not None
+                                and duration > 0
+                            ):
+                                progress = min(1.0, position / duration)
+                                bar_width = 40
+                                filled_width = int(bar_width * progress)
+                                bar = "█" * filled_width + "░" * (
+                                    bar_width - filled_width
+                                )
+                                percent = int(progress * 100)
+                                print(f"  Progress: {bar} {percent}%")
+
+                    # Wait for events from server if JSON client, otherwise sleep briefly
+                    if not hasattr(client, "get_player_status") or not isinstance(
+                        client, SqueezeJsonClient
+                    ):
+                        import time
+
+                        time.sleep(1)  # Poll every second for HTML client
+
+                except (ConnectionError, APIError, ParseError, CommandError) as e:
+                    print(f"Error in live mode: {e}", file=sys.stderr)
+                    # In live mode, just print the error and continue
+                    import time
+
+                    time.sleep(5)  # Wait a bit before retrying
+
+        except KeyboardInterrupt:
+            print("\nExiting live mode.")
+            return
+    else:
+        # Single status display (not live mode)
+        try:
+            status = client.get_player_status(player_id)
+
+            # Format and print status
+            print(f"Player: {status['player_name']} ({status['player_id']})")
+            print(f"Power: {status['power']}")
+            print(f"Status: {status['status']}")
+            if status["volume"] is not None:
+                print(f"Volume: {status['volume']}")
+
+            # Print shuffle and repeat if available
+            if "shuffle_mode" in status:
+                print(f"Shuffle: {status['shuffle_mode']}")
+            if "repeat_mode" in status:
+                print(f"Repeat: {status['repeat_mode']}")
+
+            # Print playlist info if available
+            if "playlist_count" in status and status["playlist_count"] > 0:
+                position = (
+                    status.get("playlist_position", 0) + 1
+                )  # Convert to 1-based for display
+                count = status["playlist_count"]
+                print(f"Playlist: {position} of {count}")
+
+            current_track = status["current_track"]
+            if current_track and isinstance(current_track, dict):
+                print("\nCurrent track:")
+                # Priority order for fields
+                priority_fields = [
+                    "title",
+                    "artist",
+                    "album",
+                    "position",
+                    "duration",
+                    "artwork",
+                ]
+
+                # First print priority fields in order
+                for field in priority_fields:
+                    if field in current_track:
+                        # Format position and duration as time if needed
+                        if field == "position" or field == "duration":
+                            value = format_time(current_track[field])
+                        else:
+                            value = current_track[field]
+                        print(f"  {field.capitalize()}: {value}")
+
+                # Then print any remaining fields
+                for key, value in current_track.items():
+                    if key not in priority_fields:
+                        print(f"  {key.capitalize()}: {value}")
+
+        except (ConnectionError, APIError, ParseError, CommandError) as e:
+            print(f"Error getting player status: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Unexpected error: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
 def format_time(seconds: int) -> str:
@@ -544,8 +655,11 @@ def jump_command(args: dict) -> None:
         sys.exit(1)
 
     try:
-        client.send_command(player_id, "playlist", ["index", str(track_index)])
-        print(f"Jumped to track {track_index} for player {player_id}")
+        # Use 'playlist jump' instead of 'playlist index' to immediately play the track
+        client.send_command(player_id, "playlist", ["jump", str(track_index)])
+        print(
+            f"Jumped to and started playing track {track_index} for player {player_id}"
+        )
     except Exception as e:
         print(f"Error jumping to track: {e}", file=sys.stderr)
         sys.exit(1)
@@ -603,17 +717,16 @@ def prev_command(args: dict) -> None:
         # If we're past the threshold, go to the beginning of the current track
         if position > threshold:
             try:
-                # Use the new seek_to_time method for both client types
-                client.seek_to_time(player_id, 0, debug=False)
+                # Use seek_to_time or direct time command
+                if hasattr(client, "seek_to_time"):
+                    client.seek_to_time(player_id, 0, debug=False)
+                else:
+                    # Simplified fallback - just use the 'time' command directly
+                    client.send_command(player_id, "time", ["0"])
                 print(f"Restarted current track for player {player_id}")
             except Exception as e:
                 print(f"Error seeking to start of track: {e}", file=sys.stderr)
-                # Fallback to previous method
-                try:
-                    client.send_command(player_id, "time", ["0"])
-                    print(f"Restarted current track for player {player_id}")
-                except Exception:
-                    print("Failed to restart track", file=sys.stderr)
+                sys.exit(1)
         else:
             # Otherwise, go to the previous track
             client.send_command(player_id, "playlist", ["index", "-1"])
@@ -836,4 +949,126 @@ def remote_command(args: dict) -> None:
         print(f"Sent '{button}' button press to player {player_id}")
     except Exception as e:
         print(f"Error sending button command: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def display_command(args: dict) -> None:
+    """Display a message on a player's screen.
+
+    This sends a custom message to the player's display. The message can include
+    line breaks using '\n' to split text across multiple lines on the display.
+
+    Args:
+        args: Command-line arguments
+    """
+    server_url = get_server_url(args.get("server"))
+    use_json = args.get("json", True)
+    client = create_client(server_url, prefer_json=use_json)
+
+    player_id = get_player_id(args, client)
+    if not player_id:
+        sys.exit(1)
+
+    message = args.get("message")
+    if not message:
+        print("Error: Message is required", file=sys.stderr)
+        sys.exit(1)
+
+    # Handle line breaks - different players may have varying display capabilities
+    lines = message.split("\\n")
+
+    # Get optional duration
+    duration = args.get("duration")
+    if duration:
+        try:
+            duration = int(duration)
+        except ValueError:
+            print("Error: Duration must be a number (seconds)", file=sys.stderr)
+            sys.exit(1)
+
+    try:
+        # Configure command parameters
+        params = ["line1", lines[0]]
+
+        # Add line2 if provided
+        if len(lines) > 1:
+            params.extend(["line2", lines[1]])
+
+        # Add more lines if needed and supported by the player
+        if len(lines) > 2:
+            params.extend(["line3", lines[2]])
+
+        if len(lines) > 3:
+            params.extend(["line4", lines[3]])
+
+        # Add duration if specified
+        if duration:
+            params.extend(["duration", str(duration)])
+
+        # Send the display command
+        client.send_command(player_id, "display", params)
+
+        if duration:
+            print(f"Displayed message on {player_id} for {duration} seconds")
+        else:
+            print(f"Displayed message on {player_id}")
+    except Exception as e:
+        print(f"Error displaying message: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def seek_command(args: dict) -> None:
+    """Seek to a specific position in the current track.
+
+    Args:
+        args: Command-line arguments
+    """
+    server_url = get_server_url(args.get("server"))
+    use_json = args.get("json", True)
+    client = create_client(server_url, prefer_json=use_json)
+
+    player_id = get_player_id(args, client)
+    if not player_id:
+        sys.exit(1)
+
+    position = args.get("position")
+    if position is None:
+        print("Error: Position is required", file=sys.stderr)
+        sys.exit(1)
+
+    # Parse time value which can be in seconds or MM:SS format
+    try:
+        if ":" in position:
+            # Parse MM:SS or HH:MM:SS format
+            parts = position.split(":")
+            if len(parts) == 2:
+                # MM:SS format
+                minutes, seconds = parts
+                total_seconds = int(minutes) * 60 + int(seconds)
+            elif len(parts) == 3:
+                # HH:MM:SS format
+                hours, minutes, seconds = parts
+                total_seconds = int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+            else:
+                raise ValueError("Invalid time format")
+        else:
+            # Simple seconds format
+            total_seconds = int(position)
+    except ValueError:
+        print("Error: Position must be in seconds or MM:SS format", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        # Use the seek_to_time method from the JSON client
+        if hasattr(client, "seek_to_time"):
+            client.seek_to_time(
+                player_id, total_seconds, debug=args.get("debug_command", False)
+            )
+        else:
+            # Fallback for clients that don't have seek_to_time
+            client.send_command(player_id, "time", [str(total_seconds)])
+
+        print(f"Seeked to {format_time(total_seconds)} in the current track")
+    except Exception as e:
+        print(f"Error seeking to position: {e}", file=sys.stderr)
         sys.exit(1)

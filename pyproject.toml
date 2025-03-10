@@ -21,6 +21,21 @@ disallow_untyped_decorators = true
 no_implicit_optional = true
 strict_optional = true
 
+# Handle imports of external libraries
+[[tool.mypy.overrides]]
+module = "setuptools.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pytest.*"
+ignore_missing_imports = true
+
+# Treat test files less strictly
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 testpaths = ["tests"]

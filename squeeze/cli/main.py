@@ -8,6 +8,7 @@ import sys
 from squeeze import __version__
 from squeeze.cli.commands import (
     config_command,
+    display_command,
     jump_command,
     next_command,
     now_playing_command,
@@ -19,6 +20,7 @@ from squeeze.cli.commands import (
     remote_command,
     repeat_command,
     search_command,
+    seek_command,
     server_command,
     shuffle_command,
     status_command,
@@ -74,6 +76,11 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="no_interactive",
         help="Disable interactive player selection",
+    )
+    status_parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Live mode - continuously display player status with updates",
     )
 
     # Players command
@@ -364,6 +371,58 @@ def create_parser() -> argparse.ArgumentParser:
         help="Disable interactive player selection",
     )
 
+    # Display command
+    display_parser = subparsers.add_parser(
+        "display", help="Display a message on the player's screen"
+    )
+    display_parser.add_argument(
+        "message", help="Message to display (use \\n for line breaks)"
+    )
+    display_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to send message to"
+    )
+    display_parser.add_argument(
+        "--duration", type=int, help="Display duration in seconds"
+    )
+    display_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Use interactive player selection (default when TTY available)",
+    )
+    display_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Disable interactive player selection",
+    )
+
+    # Seek command
+    seek_parser = subparsers.add_parser(
+        "seek", help="Seek to a specific position in the current track"
+    )
+    seek_parser.add_argument(
+        "position", help="Position to seek to (seconds or MM:SS format)"
+    )
+    seek_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to send command to"
+    )
+    seek_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Use interactive player selection (default when TTY available)",
+    )
+    seek_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Disable interactive player selection",
+    )
+    seek_parser.add_argument(
+        "--debug-command", action="store_true", help="Debug command URL"
+    )
+
     # Config command
     config_parser = subparsers.add_parser("config", help="Manage configuration")
     config_parser.add_argument(
@@ -439,6 +498,10 @@ def main(args: list[str] | None = None) -> int:
         repeat_command(args_dict)
     elif parsed_args.command == "remote":
         remote_command(args_dict)
+    elif parsed_args.command == "display":
+        display_command(args_dict)
+    elif parsed_args.command == "seek":
+        seek_command(args_dict)
     else:
         print(f"Error: Unknown command: {parsed_args.command}", file=sys.stderr)
         return 1
