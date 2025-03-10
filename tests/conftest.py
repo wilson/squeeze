@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 from pytest import fixture
 
-from squeeze.html_client import SqueezeHtmlClient
 from squeeze.json_client import SqueezeJsonClient
 
 # No custom protocol needed with proper typing
@@ -77,19 +76,7 @@ def player_id() -> str:
     return SAMPLE_PLAYERS[0]["id"]
 
 
-@fixture
-def mock_html_client() -> Generator[MagicMock, None, None]:
-    """Fixture for a mocked SqueezeHtmlClient."""
-    with patch("squeeze.html_client.SqueezeHtmlClient") as mock_client:
-        # Configure the mock
-        instance = mock_client.return_value
-        instance.get_players.return_value = SAMPLE_PLAYERS
-        instance.get_player_status.return_value = SAMPLE_STATUS
-
-        # Configure the mock to simulate sending commands
-        instance.send_command.return_value = None
-
-        yield instance
+# HTML client fixture removed in v0.3.0
 
 
 @fixture
@@ -125,10 +112,7 @@ def mock_urlopen() -> Generator[MagicMock, None, None]:
         yield mock
 
 
-@fixture
-def html_client(server_url: str) -> SqueezeHtmlClient:
-    """Fixture for creating a real SqueezeHtmlClient instance."""
-    return SqueezeHtmlClient(server_url)
+# HTML client fixture removed in v0.3.0
 
 
 @fixture

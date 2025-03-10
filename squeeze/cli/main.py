@@ -47,16 +47,7 @@ def create_parser() -> argparse.ArgumentParser:
         help="SqueezeBox server URL (defaults to value in ~/.squeezerc)",
     )
 
-    # API selection
-    parser.add_argument(
-        "--json", action="store_true", help="Use JSON API (default is auto-detect)"
-    )
-    parser.add_argument(
-        "--no-json",
-        action="store_false",
-        dest="json",
-        help="Force HTML-based API (don't use JSON API)",
-    )
+    # No longer needed with JSON-only client
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
@@ -184,9 +175,9 @@ def create_parser() -> argparse.ArgumentParser:
         help="Disable interactive player selection",
     )
 
-    # Search command (JSON API only)
+    # Search command
     search_parser = subparsers.add_parser(
-        "search", help="Search for music in the library (requires JSON API)"
+        "search", help="Search for music in the library"
     )
     search_parser.add_argument("term", help="Search term")
     search_parser.add_argument(
@@ -196,20 +187,8 @@ def create_parser() -> argparse.ArgumentParser:
         help="Type of items to search for",
     )
 
-    # Server command (JSON API only)
-    server_parser = subparsers.add_parser(
-        "server", help="Get server status information (requires JSON API)"
-    )
-    # Add API selection flags explicitly to server subparser
-    server_parser.add_argument(
-        "--json", action="store_true", help="Use JSON API (default is auto-detect)"
-    )
-    server_parser.add_argument(
-        "--no-json",
-        action="store_false",
-        dest="json",
-        help="Force HTML-based API (don't use JSON API)",
-    )
+    # Server command
+    subparsers.add_parser("server", help="Get server status information")
 
     # Next track command
     next_parser = subparsers.add_parser("next", help="Skip to next track")

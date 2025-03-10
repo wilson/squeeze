@@ -24,8 +24,7 @@ class TestParser:
         args = parse_args(["status"])
         assert args.command == "status"
         assert args.player_id is None
-        # json is False by default due to --no-json option
-        assert args.json is False
+        # json flag removed in v0.3.0
 
     def test_parse_args_with_options(self) -> None:
         """Test parsing command-line arguments with options."""

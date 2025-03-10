@@ -4,7 +4,7 @@
 from setuptools import find_packages, setup
 
 # Use a static version instead of importing from the package
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 setup(
     name="squeeze",

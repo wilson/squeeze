@@ -16,12 +16,11 @@ from squeeze.exceptions import (
     ParseError,
     SqueezeError,
 )
-from squeeze.html_client import SqueezeHtmlClient
 from squeeze.json_client import SqueezeJsonClient
 from squeeze.ui import select_player
 
-# Type alias for either client type
-ClientType = SqueezeHtmlClient | SqueezeJsonClient
+# Type alias for client type
+ClientType = SqueezeJsonClient
 
 # Type alias for command arguments
 ArgsDict = dict[str, Any]
@@ -34,11 +33,10 @@ def status_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
     live_mode = args.get("live", False)
 
     try:
-        client = create_client(server_url, prefer_json=use_json)
+        client = create_client(server_url)
     except ConnectionError as e:
         print(f"Error connecting to server: {e}", file=sys.stderr)
         sys.exit(1)
@@ -59,14 +57,8 @@ def status_command(args: ArgsDict) -> None:
             print()
             while True:
                 try:
-                    # Use subscribe mode for JSON client to get updates
-                    if hasattr(client, "get_player_status") and isinstance(
-                        client, SqueezeJsonClient
-                    ):
-                        status = client.get_player_status(player_id, subscribe=True)
-                    else:
-                        # For HTML client, just poll regularly
-                        status = client.get_player_status(player_id)
+                    # Use subscribe mode to get updates
+                    status = client.get_player_status(player_id, subscribe=True)
 
                     # Clear the screen for a cleaner display
                     # We can't use os.system('clear') because it's not portable
@@ -142,13 +134,10 @@ def status_command(args: ArgsDict) -> None:
                                 percent = int(progress * 100)
                                 print(f"  Progress: {bar} {percent}%")
 
-                    # Wait for events from server if JSON client, otherwise sleep briefly
-                    if not hasattr(client, "get_player_status") or not isinstance(
-                        client, SqueezeJsonClient
-                    ):
-                        import time
+                    # Sleep briefly to handle cases where server doesn't support subscribe mode
+                    import time
 
-                        time.sleep(1)  # Poll every second for HTML client
+                    time.sleep(0.1)
 
                 except (ConnectionError, APIError, ParseError, CommandError) as e:
                     print(f"Error in live mode: {e}", file=sys.stderr)
@@ -247,8 +236,7 @@ def players_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     try:
         players = client.get_players()
@@ -317,8 +305,7 @@ def play_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -339,8 +326,7 @@ def pause_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -361,8 +347,7 @@ def stop_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -383,39 +368,21 @@ def volume_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     volume = args.get("volume")
     if volume is None:
         print("Error: Volume is required", file=sys.stderr)
         sys.exit(1)
 
-    # Debug mode can be used without a player ID
-    if args.get("debug") and args.get("player_id"):
-        player_id_arg = args.get("player_id")
-        if isinstance(player_id_arg, str) and isinstance(client, SqueezeHtmlClient):
-            client.debug_volume_controls(player_id_arg)
-            return
-        elif isinstance(player_id_arg, str):
-            print(
-                "Debug volume controls only available for HTML client", file=sys.stderr
-            )
-            return
+    # Debug mode no longer supported as it was HTML client specific
+    if args.get("debug"):
+        print("Debug volume controls no longer supported in v0.3.0", file=sys.stderr)
+        return
 
     player_id = get_player_id(args, client)
     if not player_id:
         sys.exit(1)
-
-    # Debug mode requires player ID
-    if args.get("debug"):
-        if isinstance(client, SqueezeHtmlClient):
-            client.debug_volume_controls(player_id)
-        else:
-            print(
-                "Debug volume controls only available for HTML client", file=sys.stderr
-            )
-        return
 
     # Validate volume (0-100)
     try:
@@ -444,8 +411,7 @@ def power_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -474,8 +440,7 @@ def search_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     # Ensure we have a JSON client
     if not hasattr(client, "get_artists"):
@@ -577,7 +542,7 @@ def server_command(args: ArgsDict) -> None:
 
     # Always force JSON for server command - it requires JSON API
     try:
-        client = create_client(server_url, prefer_json=True)
+        client = create_client(server_url)
     except ConnectionError as e:
         print(f"Error connecting to server: {e}", file=sys.stderr)
         print("The 'server' command requires JSON API support.", file=sys.stderr)
@@ -640,8 +605,7 @@ def next_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -662,8 +626,7 @@ def jump_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -703,8 +666,7 @@ def prev_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -774,8 +736,7 @@ def now_playing_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -804,8 +765,7 @@ def shuffle_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -868,8 +828,7 @@ def repeat_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -942,8 +901,7 @@ def remote_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -989,8 +947,7 @@ def display_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -1051,8 +1008,7 @@ def seek_command(args: ArgsDict) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.get("server"))
-    use_json = args.get("json", True)
-    client = create_client(server_url, prefer_json=use_json)
+    client = create_client(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:

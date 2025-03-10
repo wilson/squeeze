@@ -23,18 +23,9 @@ You can set the server URL using the command:
 squeeze config --set-server "http://your-squeezebox-server:9000"
 ```
 
-## API Options
+## API
 
-Squeeze supports two different APIs for communicating with the SqueezeBox server:
-
-1. **JSON API** (default) - Uses the JSON-RPC API for cleaner and more reliable communication
-2. **HTML API** (fallback) - Uses HTML scraping when JSON API is not available
-
-You can control which API to use with these flags:
-- `--json` - Force the use of JSON API
-- `--no-json` - Force the use of HTML API
-
-By default, Squeeze will auto-detect which API is available and use the JSON API if possible.
+Squeeze uses the SqueezeBox server's JSON-RPC API for clean and reliable communication.
 
 ## Usage
 
@@ -137,9 +128,7 @@ squeeze remote browse [player_id]
 
 Note: Square brackets `[]` indicate optional parameters. If omitted, you'll get an interactive player selection.
 
-### JSON API Only Commands
-
-The following commands require the JSON API:
+### Additional Commands
 
 Search for music:
 ```bash
@@ -159,6 +148,14 @@ squeeze server
 This project requires Python 3.11 or higher.
 
 ### Version History
+
+- v0.3.0:
+  - Breaking changes:
+    - Removed HTML API support, now exclusively uses JSON API
+    - Simplified client factory to only create JSON clients
+  - Benefits:
+    - Reduced code complexity
+    - More consistent behavior
 
 - v0.2.0:
   - Added new commands:
