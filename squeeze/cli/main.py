@@ -16,6 +16,7 @@ from squeeze.cli.commands import (
     players_command,
     power_command,
     prev_command,
+    remote_command,
     repeat_command,
     search_command,
     server_command,
@@ -338,6 +339,31 @@ def create_parser() -> argparse.ArgumentParser:
         help="Disable interactive player selection",
     )
 
+    # Remote control button command
+    remote_parser = subparsers.add_parser(
+        "remote", help="Send remote control button presses"
+    )
+    remote_parser.add_argument(
+        "button",
+        choices=["up", "down", "left", "right", "select"],
+        help="Button to press",
+    )
+    remote_parser.add_argument(
+        "player_id", nargs="?", help="ID of the player to send command to"
+    )
+    remote_parser.add_argument(
+        "--interactive",
+        action="store_true",
+        dest="interactive",
+        help="Use interactive player selection (default when TTY available)",
+    )
+    remote_parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        dest="no_interactive",
+        help="Disable interactive player selection",
+    )
+
     # Config command
     config_parser = subparsers.add_parser("config", help="Manage configuration")
     config_parser.add_argument(
@@ -411,6 +437,8 @@ def main(args: list[str] | None = None) -> int:
         shuffle_command(args_dict)
     elif parsed_args.command == "repeat":
         repeat_command(args_dict)
+    elif parsed_args.command == "remote":
+        remote_command(args_dict)
     else:
         print(f"Error: Unknown command: {parsed_args.command}", file=sys.stderr)
         return 1

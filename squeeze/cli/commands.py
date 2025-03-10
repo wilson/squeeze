@@ -783,3 +783,55 @@ def repeat_command(args: dict) -> None:
     except Exception as e:
         print(f"Error setting repeat mode: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def remote_command(args: dict) -> None:
+    """Send a remote control button press to a player.
+
+    Simulates pressing a button on the physical SqueezeBox remote control.
+
+    Supported buttons:
+    - up: Move up in menu
+    - down: Move down in menu
+    - left: Move left in menu or go back
+    - right: Move right in menu or go forward
+    - select: Select current menu item (also called 'center' or 'ok')
+
+    Args:
+        args: Command-line arguments
+    """
+    server_url = get_server_url(args.get("server"))
+    use_json = args.get("json", True)
+    client = create_client(server_url, prefer_json=use_json)
+
+    player_id = get_player_id(args, client)
+    if not player_id:
+        sys.exit(1)
+
+    button = args.get("button")
+
+    # Map friendly button names to IR codes
+    button_map = {
+        "up": "up",
+        "down": "down",
+        "left": "left",
+        "right": "right",
+        "select": "center",  # Also known as "ok" or "enter"
+    }
+
+    if button not in button_map:
+        print(
+            f"Error: Unknown button '{button}'. Must be one of: {', '.join(button_map.keys())}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    command_name = button_map[button]
+
+    try:
+        # Send the IR code to simulate the button press
+        client.send_command(player_id, "button", [command_name])
+        print(f"Sent '{button}' button press to player {player_id}")
+    except Exception as e:
+        print(f"Error sending button command: {e}", file=sys.stderr)
+        sys.exit(1)

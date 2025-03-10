@@ -120,6 +120,18 @@ Now Playing screen:
 squeeze now [player_id]
 ```
 
+Remote control navigation:
+```bash
+# Arrow buttons
+squeeze remote up [player_id]
+squeeze remote down [player_id]
+squeeze remote left [player_id]
+squeeze remote right [player_id]
+
+# Select/OK button
+squeeze remote select [player_id]
+```
+
 Note: Square brackets `[]` indicate optional parameters. If omitted, you'll get an interactive player selection.
 
 ### JSON API Only Commands
@@ -150,6 +162,7 @@ This project requires Python 3.11 or higher.
     - `shuffle` - Control shuffle mode (off/songs/albums)
     - `repeat` - Control repeat mode (off/one/all)
     - `now` - Show Now Playing screen
+    - `remote` - Send remote control button presses (up/down/left/right/select)
   - Breaking changes:
     - Removed backward compatibility layer (`client.py`)
     - Direct imports from `squeeze.client` should be changed to `squeeze.html_client`
