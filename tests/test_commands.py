@@ -164,7 +164,7 @@ def test_seek_command(
 
         # Verify
         mock_json_client.seek_to_time.assert_called_once_with(
-            player_id, expected_seconds, debug=False
+            player_id, expected_seconds
         )
 
 

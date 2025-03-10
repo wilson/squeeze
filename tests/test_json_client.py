@@ -213,9 +213,9 @@ def test_set_volume(json_client: SqueezeJsonClient) -> None:
             "00:11:22:33:44:55", "mixer", "volume", "100"
         )
 
-        # Reset mock and test debug flag
+        # Reset mock and test volume 75
         mock_send_request.reset_mock()
-        json_client.set_volume("00:11:22:33:44:55", 75, debug=True)
+        json_client.set_volume("00:11:22:33:44:55", 75)
         mock_send_request.assert_called_once_with(
             "00:11:22:33:44:55", "mixer", "volume", "75"
         )

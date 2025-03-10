@@ -2,7 +2,9 @@
 SqueezeBox client library for interacting with SqueezeBox server using JSON API.
 """
 
+import http.client
 import json
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -65,23 +67,42 @@ class SqueezeJsonClient:
     """Client for interacting with SqueezeBox server using JSON API."""
 
     server_url: str
+    api_path: str = field(default="/jsonrpc.js")
     next_id: int = field(default=1)
+    max_retries: int = field(default=2)
+    retry_delay: float = field(default=1.0)
 
     def __post_init__(self) -> None:
         """Initialize after instance creation."""
         self.server_url = self.server_url.rstrip("/")
+        if not self.api_path.startswith("/"):
+            self.api_path = f"/{self.api_path}"
 
     @classmethod
-    def create(cls, server_url: str) -> Self:
+    def create(
+        cls,
+        server_url: str,
+        api_path: str = "/jsonrpc.js",
+        max_retries: int = 2,
+        retry_delay: float = 1.0,
+    ) -> Self:
         """Factory method to create a client instance.
 
         Args:
             server_url: URL of the SqueezeBox server
+            api_path: Path to the JSON API endpoint
+            max_retries: Maximum number of request retries for transient errors
+            retry_delay: Delay between retries in seconds
 
         Returns:
             A new client instance
         """
-        return cls(server_url.rstrip("/"))
+        return cls(
+            server_url.rstrip("/"),
+            api_path=api_path,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
 
     def _send_request(
         self, player_id: str | None, command: str, *args: Any
@@ -122,59 +143,123 @@ class SqueezeJsonClient:
         except (TypeError, ValueError) as e:
             raise ParseError(f"Failed to encode request: {e}")
 
-        # Send the request
-        url = f"{self.server_url}/jsonrpc.js"
+        # Send the request with retry logic
+        url = f"{self.server_url}{self.api_path}"
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
-        try:
-            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-            with urllib.request.urlopen(req) as response:
-                response_data = response.read().decode("utf-8")
+        last_error: Exception | None = None
 
-                try:
-                    result: JsonResponse = json.loads(response_data)
-                except json.JSONDecodeError as e:
-                    raise ParseError(f"Failed to parse JSON response: {e}")
+        # Implement retry logic
+        for attempt in range(self.max_retries):
+            try:
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    response_data = response.read().decode("utf-8")
 
-                # Check for error in response using pattern matching
-                if "error" in result:
-                    error_info = result["error"]
-                    match error_info:
-                        case dict():
-                            code = error_info.get("code", 0)
-                            message = error_info.get("message", "Unknown error")
-                            raise APIError(f"Server error: {message}", code)
-                        case str():
-                            raise APIError(f"Server error: {error_info}")
-                        case _:
-                            raise APIError(f"Server error: {error_info}")
-
-                return result
-
-        except urllib.error.HTTPError as e:
-            match e.code:
-                case 401 | 403:
-                    raise APIError(f"Authentication error: HTTP {e.code}")
-                case 404:
-                    raise APIError("API endpoint not found")
-                case 429:
-                    raise APIError("Rate limit exceeded")
-                case 500 | 502 | 503 | 504:
-                    raise APIError(f"Server error: HTTP {e.code}")
-                case _:
                     try:
-                        response_body = e.read().decode("utf-8")
-                        raise APIError(f"HTTP error {e.code}: {response_body}")
-                    except Exception:
-                        raise APIError(f"HTTP error {e.code}")
+                        result: JsonResponse = json.loads(response_data)
+                    except json.JSONDecodeError as e:
+                        # Don't retry JSON parsing errors
+                        raise ParseError(f"Failed to parse JSON response: {e}")
 
-        except urllib.error.URLError as e:
-            reason = str(e.reason) if hasattr(e, "reason") else str(e)
-            raise ConnectionError(f"Failed to connect to server: {reason}")
+                    # Check for error in response using pattern matching
+                    if "error" in result:
+                        error_info = result["error"]
+                        match error_info:
+                            case dict():
+                                code = error_info.get("code", 0)
+                                message = error_info.get("message", "Unknown error")
+                                # Don't retry application-level errors
+                                raise APIError(f"Server error: {message}", code)
+                            case str():
+                                raise APIError(f"Server error: {error_info}")
+                            case _:
+                                raise APIError(f"Server error: {error_info}")
 
-        except Exception as e:
+                    # Success - return result without retrying
+                    return result
+
+            except urllib.error.HTTPError as e:
+                # Some HTTP errors should not be retried
+                match e.code:
+                    case 401 | 403:
+                        raise APIError(f"Authentication error: HTTP {e.code}")
+                    case 404:
+                        raise APIError("API endpoint not found")
+                    case 429:
+                        # Rate limiting - add extra delay before retry
+                        last_error = e
+                        # Wait longer for rate limit errors
+                        time.sleep(self.retry_delay * 2)
+                        continue
+                    case 500 | 502 | 503 | 504:
+                        # Server errors are retryable
+                        last_error = e
+                    case _:
+                        # Other HTTP errors
+                        try:
+                            response_body = e.read().decode("utf-8")
+                            last_error = APIError(
+                                f"HTTP error {e.code}: {response_body}"
+                            )
+                        except Exception:
+                            last_error = APIError(f"HTTP error {e.code}")
+
+            except (urllib.error.URLError, http.client.RemoteDisconnected) as e:
+                # Network errors are retryable
+                last_error = e
+
+            except Exception as e:
+                # Other unexpected errors
+                last_error = e
+
+            # Only sleep if more retries coming
+            if attempt < self.max_retries - 1:
+                time.sleep(self.retry_delay)
+
+        # If we've exhausted all retries, raise the appropriate error
+        if isinstance(last_error, urllib.error.HTTPError):
+            match last_error.code:
+                case 500 | 502 | 503 | 504:
+                    raise APIError(
+                        f"Server error after {self.max_retries} attempts: HTTP {last_error.code}"
+                    )
+                case _:
+                    raise APIError(
+                        f"HTTP error {last_error.code} after {self.max_retries} attempts"
+                    )
+
+        elif isinstance(last_error, urllib.error.URLError):
+            reason = (
+                str(last_error.reason)
+                if hasattr(last_error, "reason")
+                else str(last_error)
+            )
+            raise ConnectionError(
+                f"Failed to connect to server after {self.max_retries} attempts: {reason}"
+            )
+
+        elif isinstance(last_error, http.client.RemoteDisconnected):
+            raise ConnectionError(
+                f"Server closed connection after {self.max_retries} attempts. "
+                "The server may be busy or behind a firewall."
+            )
+
+        elif isinstance(last_error, APIError):
+            # Re-raise API errors with retry context
+            raise APIError(f"{str(last_error)} (after {self.max_retries} attempts)")
+
+        elif last_error:
             # Catch-all for any other unexpected errors
-            raise ConnectionError(f"Unexpected error: {str(e)}")
+            raise ConnectionError(
+                f"Unexpected error after {self.max_retries} attempts: {str(last_error)}"
+            )
+
+        else:
+            # This should never happen, but just in case
+            raise ConnectionError(
+                f"Failed to connect to server after {self.max_retries} attempts"
+            )
 
     def get_players(self) -> list[dict[str, str]]:
         """Get list of available players.
@@ -292,8 +377,14 @@ class SqueezeJsonClient:
 
             # Playlist info
             if "playlist_loop" in result:
-                status["playlist_count"] = result.get("playlist_tracks", 0)
-                status["playlist_position"] = result.get("playlist_cur_index", 0)
+                status["playlist_count"] = int(result.get("playlist_tracks", 0))
+                # Ensure playlist_position is always an integer
+                try:
+                    status["playlist_position"] = int(
+                        result.get("playlist_cur_index", 0)
+                    )
+                except (ValueError, TypeError):
+                    status["playlist_position"] = 0
 
             # Shuffle and repeat mode
             if "playlist_shuffle" in result:
@@ -348,13 +439,12 @@ class SqueezeJsonClient:
             # Convert generic exceptions to APIError
             raise APIError(f"Failed to get player status: {str(e)}")
 
-    def set_volume(self, player_id: str, volume: int, debug: bool = False) -> None:
+    def set_volume(self, player_id: str, volume: int) -> None:
         """Set volume for a player.
 
         Args:
             player_id: ID of the player to set volume for
             volume: Volume level (0-100)
-            debug: Optional flag to print debugging information
 
         Raises:
             APIError: If the server returns an error response
@@ -364,46 +454,75 @@ class SqueezeJsonClient:
         # Ensure volume is in valid range
         volume = max(0, min(100, volume))
 
-        if debug:
-            print(f"Debug: Setting volume to {volume} for player {player_id}")
-
+        # Use the send_command method which now has built-in retry logic
+        # Note: We're bypassing the send_command special case for volume by using _send_request directly
         try:
-            self._send_request(player_id, "mixer", "volume", str(volume))
-        except (ConnectionError, APIError, ParseError) as e:
-            # Re-raise with more context
-            raise CommandError(str(e), command=f"mixer volume {volume}")
+            # Helper function to send with retry logic
+            def send_with_retry(max_attempts: int = 2) -> JsonResponse:
+                """Send volume command with automatic retry on transient errors."""
+                last_error = None
+
+                for attempt in range(max_attempts):
+                    try:
+                        result = self._send_request(
+                            player_id, "mixer", "volume", str(volume)
+                        )
+                        return result
+                    except (ConnectionError, http.client.RemoteDisconnected) as e:
+                        # Only retry network errors
+                        last_error = e
+                        if attempt < max_attempts - 1:
+                            import time
+
+                            # Exponential backoff
+                            time.sleep(self.retry_delay * (2**attempt))
+                        else:
+                            # On last attempt, convert to CommandError
+                            raise CommandError(str(e), command=f"mixer volume {volume}")
+                    except (APIError, ParseError) as e:
+                        # Don't retry application errors
+                        raise CommandError(str(e), command=f"mixer volume {volume}")
+                    except Exception as e:
+                        # Don't retry other exceptions
+                        raise CommandError(str(e), command=f"mixer volume {volume}")
+
+                # This should never be reached if max_attempts > 0
+                if last_error:
+                    raise CommandError(
+                        str(last_error), command=f"mixer volume {volume}"
+                    )
+
+                # This is just to satisfy mypy - this line will never be reached
+                # because we either return or raise an exception above
+                raise CommandError(
+                    "Failed to set volume", command=f"mixer volume {volume}"
+                )
+
+            # Send with automatic retry for transient errors
+            send_with_retry()
+        except CommandError:
+            # Just re-raise command errors
+            raise
         except Exception as e:
-            # Convert generic exceptions to CommandError
+            # Convert any other exceptions to CommandError
             raise CommandError(str(e), command=f"mixer volume {volume}")
 
-    def seek_to_time(self, player_id: str, seconds: int, debug: bool = False) -> None:
+    def seek_to_time(self, player_id: str, seconds: int) -> None:
         """Seek to a specific time in the current track.
 
         Args:
             player_id: ID of the player
             seconds: Time position in seconds
-            debug: Optional flag to print debugging information
 
         Raises:
             APIError: If the server returns an error response
             ConnectionError: If unable to connect to the server
             CommandError: If the command fails to execute
         """
-        if debug:
-            print(f"Debug: Seeking to {seconds} seconds for player {player_id}")
+        # Use the send_command method which now has built-in retry logic
+        self.send_command(player_id, "time", [str(seconds)])
 
-        try:
-            # According to the API reference, 'time' is the command to seek within a track
-            # Simply send the time command with the seconds value
-            self._send_request(player_id, "time", str(seconds))
-        except (ConnectionError, APIError, ParseError) as e:
-            # Re-raise with more context
-            raise CommandError(str(e), command=f"seek to {seconds}")
-        except Exception as e:
-            # Convert generic exceptions to CommandError
-            raise CommandError(str(e), command=f"seek to {seconds}")
-
-    def show_now_playing(self, player_id: str, debug: bool = False) -> None:
+    def show_now_playing(self, player_id: str) -> None:
         """Show the Now Playing screen on the player.
 
         This mimics pressing the Now Playing button on the remote control,
@@ -411,31 +530,20 @@ class SqueezeJsonClient:
 
         Args:
             player_id: ID of the player
-            debug: Optional flag to print debugging information
 
         Raises:
             APIError: If the server returns an error response
             ConnectionError: If unable to connect to the server
             CommandError: If the command fails to execute
         """
-        if debug:
-            print(f"Debug: Showing Now Playing screen for player {player_id}")
-
-        try:
-            self._send_request(player_id, "display")
-        except (ConnectionError, APIError, ParseError) as e:
-            # Re-raise with more context
-            raise CommandError(str(e), command="display")
-        except Exception as e:
-            # Convert generic exceptions to CommandError
-            raise CommandError(str(e), command="display")
+        # Use the send_command method which now has built-in retry logic
+        self.send_command(player_id, "display")
 
     def send_command(
         self,
         player_id: str,
         command: str,
         params: list[str] | None = None,
-        debug: bool = False,
     ) -> None:
         """Send a command to a player.
 
@@ -443,7 +551,6 @@ class SqueezeJsonClient:
             player_id: ID of the player to send command to
             command: Command to send
             params: Optional parameters for the command
-            debug: Optional flag to print debugging information
 
         Raises:
             APIError: If the server returns an error response
@@ -453,14 +560,11 @@ class SqueezeJsonClient:
         param_str = " ".join(params) if params else ""
         cmd_str = f"{command} {param_str}".strip()
 
-        if debug:
-            print(f"Debug: Sending command {cmd_str} to player {player_id}")
-
         # Special handling for common commands
         if command == "mixer" and params and params[0] == "volume" and len(params) > 1:
             try:
                 volume = int(params[1])
-                self.set_volume(player_id, volume, debug)
+                self.set_volume(player_id, volume)
                 return
             except (ValueError, IndexError) as e:
                 raise CommandError(f"Invalid volume parameter: {e}", command=cmd_str)
@@ -470,13 +574,53 @@ class SqueezeJsonClient:
 
         # Convert params to positional args for _send_request
         args = params if params else []
+
+        # Helper function to send with retry logic
+        def send_with_retry(
+            base_command: str, command_args: list[str], max_attempts: int = 2
+        ) -> JsonResponse:
+            """Send a command with automatic retry on transient errors."""
+            last_error = None
+
+            for attempt in range(max_attempts):
+                try:
+                    # Don't return None from functions with return type annotation
+                    result = self._send_request(player_id, base_command, *command_args)
+                    return result
+                except (ConnectionError, http.client.RemoteDisconnected) as e:
+                    # Only retry network errors
+                    last_error = e
+                    if attempt < max_attempts - 1:
+                        import time
+
+                        # Exponential backoff
+                        time.sleep(self.retry_delay * (2**attempt))
+                    else:
+                        # On last attempt, convert to CommandError
+                        raise CommandError(str(e), command=cmd_str)
+                except (APIError, ParseError) as e:
+                    # Don't retry application errors
+                    raise CommandError(str(e), command=cmd_str)
+                except Exception as e:
+                    # Don't retry other exceptions
+                    raise CommandError(str(e), command=cmd_str)
+
+            # This should never be reached if max_attempts > 0
+            if last_error:
+                raise CommandError(str(last_error), command=cmd_str)
+
+            # This is just to satisfy mypy - this line will never be reached
+            # because we either return or raise an exception above
+            raise CommandError("Failed to send command", command=cmd_str)
+
+        # Send with automatic retry for transient errors
         try:
-            self._send_request(player_id, command, *args)
-        except (ConnectionError, APIError, ParseError) as e:
-            # Re-raise with more context
-            raise CommandError(str(e), command=cmd_str)
+            send_with_retry(command, args)
+        except CommandError:
+            # Just re-raise command errors
+            raise
         except Exception as e:
-            # Convert generic exceptions to CommandError
+            # Convert any other exceptions to CommandError
             raise CommandError(str(e), command=cmd_str)
 
     def get_server_status(self) -> dict[str, Any]:

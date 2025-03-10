@@ -231,9 +231,6 @@ def create_parser() -> argparse.ArgumentParser:
         dest="no_interactive",
         help="Disable interactive player selection",
     )
-    seek_parser.add_argument(
-        "--debug-command", action="store_true", help="Debug command URL"
-    )
 
     # Jump to track command
     jump_parser = subparsers.add_parser(
@@ -275,9 +272,6 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="no_interactive",
         help="Disable interactive player selection",
-    )
-    volume_parser.add_argument(
-        "--debug-command", action="store_true", help="Debug command URL"
     )
 
     # Power command
@@ -369,9 +363,6 @@ def create_parser() -> argparse.ArgumentParser:
         dest="no_interactive",
         help="Disable interactive player selection",
     )
-    now_playing_parser.add_argument(
-        "--debug-command", action="store_true", help="Debug command URL"
-    )
 
     # Remote control button command
     remote_parser = subparsers.add_parser(
@@ -460,7 +451,6 @@ def main(args: list[str] | None = None) -> int:
 
     # Common arguments for all commands
     server = args_dict.get("server")
-    debug_command = args_dict.get("debug_command", False)
 
     # Player command common arguments
     player_id = args_dict.get("player_id")
@@ -472,7 +462,6 @@ def main(args: list[str] | None = None) -> int:
         live = args_dict.get("live", False)
         status_args = StatusCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -480,12 +469,11 @@ def main(args: list[str] | None = None) -> int:
         )
         status_command(status_args)
     elif parsed_args.command == "players":
-        players_args = PlayersCommandArgs(server=server, debug_command=debug_command)
+        players_args = PlayersCommandArgs(server=server)
         players_command(players_args)
     elif parsed_args.command in ("play", "pause", "stop", "now"):
         player_args = PlayerCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -508,7 +496,6 @@ def main(args: list[str] | None = None) -> int:
 
         volume_args = VolumeCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -519,7 +506,6 @@ def main(args: list[str] | None = None) -> int:
         state = args_dict.get("state", "on")
         power_args = PowerCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -528,24 +514,19 @@ def main(args: list[str] | None = None) -> int:
         power_command(power_args)
     elif parsed_args.command == "config":
         set_server = args_dict.get("set_server")
-        config_args = ConfigCommandArgs(
-            server=server, debug_command=debug_command, set_server=set_server
-        )
+        config_args = ConfigCommandArgs(server=server, set_server=set_server)
         config_command(config_args)
     elif parsed_args.command == "search":
         term = args_dict.get("term", "")
         search_type = args_dict.get("type")
-        search_args = SearchCommandArgs(
-            server=server, debug_command=debug_command, term=term, type=search_type
-        )
+        search_args = SearchCommandArgs(server=server, term=term, type=search_type)
         search_command(search_args)
     elif parsed_args.command == "server":
-        server_args = ServerCommandArgs(server=server, debug_command=debug_command)
+        server_args = ServerCommandArgs(server=server)
         server_command(server_args)
     elif parsed_args.command == "next":
         next_args = PlayerCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -555,7 +536,6 @@ def main(args: list[str] | None = None) -> int:
         threshold = args_dict.get("threshold", 5)
         prev_args = PrevCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -572,7 +552,6 @@ def main(args: list[str] | None = None) -> int:
 
         jump_args = JumpCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -583,7 +562,6 @@ def main(args: list[str] | None = None) -> int:
         mode = args_dict.get("mode")
         shuffle_args = ShuffleCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -594,7 +572,6 @@ def main(args: list[str] | None = None) -> int:
         mode = args_dict.get("mode")
         repeat_args = RepeatCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -605,7 +582,6 @@ def main(args: list[str] | None = None) -> int:
         button = args_dict.get("button", "select")
         remote_args = RemoteCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -617,7 +593,6 @@ def main(args: list[str] | None = None) -> int:
         duration = args_dict.get("duration")
         display_args = DisplayCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
@@ -629,7 +604,6 @@ def main(args: list[str] | None = None) -> int:
         position = args_dict.get("position", "")
         seek_args = SeekCommandArgs(
             server=server,
-            debug_command=debug_command,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,

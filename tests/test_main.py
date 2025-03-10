@@ -138,8 +138,8 @@ class TestMainFunction:
             # Verify that we are passing a dataclass
             args_obj = mock_command.call_args[0][0]
 
-            # All command args dataclasses have debug_command attribute
-            assert hasattr(args_obj, "debug_command")
+            # All command args dataclasses inherit from CommandArgs
+            assert hasattr(args_obj, "server")
 
             # For commands with extra args, check some specific attributes
             if command == "volume" and extra_args:

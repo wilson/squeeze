@@ -25,13 +25,36 @@ from squeeze.ui import select_player
 ClientType = SqueezeJsonClient
 
 
+def create_client_with_error_handling(server_url: str) -> SqueezeJsonClient:
+    """Create a client with consistent error handling and messaging.
+
+    Args:
+        server_url: URL of the SqueezeBox server
+
+    Returns:
+        SqueezeJsonClient instance
+
+    Raises:
+        SystemExit: If client creation fails
+    """
+    try:
+        return create_client(server_url)
+    except ConnectionError as e:
+        print(str(e), file=sys.stderr)
+        print("\nTips:", file=sys.stderr)
+        print("  • Make sure your SqueezeBox server is running", file=sys.stderr)
+        print("  • Check the server URL with 'squeeze config'", file=sys.stderr)
+        print("  • Try using a direct IP address instead of hostname", file=sys.stderr)
+        print("  • Verify network connectivity to the server", file=sys.stderr)
+        sys.exit(1)
+
+
 # Command argument dataclasses for improved type safety
 @dataclass
 class CommandArgs:
     """Base class for command arguments."""
 
     server: str | None = None
-    debug_command: bool = False
 
 
 @dataclass
@@ -138,17 +161,31 @@ class ServerCommandArgs(CommandArgs):
     pass
 
 
-def display_progress_bar(position: int, duration: int) -> None:
+def display_progress_bar(
+    position: int | float | str, duration: int | float | str
+) -> None:
     """Display a progress bar for track position.
 
     Args:
-        position: Current position in seconds
-        duration: Total duration in seconds
+        position: Current position in seconds (can be int, float, or string)
+        duration: Total duration in seconds (can be int, float, or string)
     """
-    if position is None or duration is None or duration <= 0:
+    # Convert position and duration to float, with careful handling of types
+    try:
+        pos_float = float(position) if position is not None else 0
+    except (ValueError, TypeError):
+        pos_float = 0
+
+    try:
+        dur_float = float(duration) if duration is not None else 0
+    except (ValueError, TypeError):
+        dur_float = 0
+
+    # Skip if invalid values
+    if pos_float <= 0 or dur_float <= 0:
         return
 
-    progress = min(1.0, position / duration)
+    progress = min(1.0, pos_float / dur_float)
     bar_width = 40
     filled_width = int(bar_width * progress)
     bar = "█" * filled_width + "░" * (bar_width - filled_width)
@@ -276,12 +313,7 @@ def status_command(args: StatusCommandArgs) -> None:
     """
     server_url = get_server_url(args.server)
     live_mode = args.live
-
-    try:
-        client = create_client(server_url)
-    except ConnectionError as e:
-        print(f"Error connecting to server: {e}", file=sys.stderr)
-        sys.exit(1)
+    client = create_client_with_error_handling(server_url)
 
     # Use the common get_player_id helper
     try:
@@ -308,17 +340,27 @@ def status_command(args: StatusCommandArgs) -> None:
             sys.exit(1)
 
 
-def format_time(seconds: int) -> str:
+def format_time(seconds: int | str | float) -> str:
     """Format seconds as mm:ss or hh:mm:ss.
 
     Args:
-        seconds: Time in seconds
+        seconds: Time in seconds (supports int, float, or str)
 
     Returns:
         Formatted time string
     """
-    minutes, seconds = divmod(int(seconds), 60)
-    hours, minutes = divmod(minutes, 60)
+    try:
+        # Convert to int to handle various input types
+        if isinstance(seconds, str):
+            seconds = int(float(seconds))
+        else:
+            seconds = int(seconds)
+
+        minutes, seconds = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+    except (ValueError, TypeError):
+        # Handle invalid input
+        return "0:00"
 
     if hours > 0:
         return f"{hours}:{minutes:02d}:{seconds:02d}"
@@ -396,7 +438,7 @@ def play_command(args: PlayerCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -417,7 +459,7 @@ def pause_command(args: PlayerCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -438,7 +480,7 @@ def stop_command(args: PlayerCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -459,7 +501,7 @@ def volume_command(args: VolumeCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     volume = args.volume
 
@@ -472,10 +514,8 @@ def volume_command(args: VolumeCommandArgs) -> None:
         print("Error: Volume must be between 0 and 100", file=sys.stderr)
         sys.exit(1)
 
-    debug = args.debug_command
-
     try:
-        client.send_command(player_id, "mixer", ["volume", str(volume)], debug=debug)
+        client.send_command(player_id, "mixer", ["volume", str(volume)])
         print(f"Volume set to {volume} for player {player_id}")
     except Exception as e:
         print(f"Error setting volume: {e}", file=sys.stderr)
@@ -489,7 +529,7 @@ def power_command(args: PowerCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -533,7 +573,7 @@ def search_command(args: SearchCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     # Verify the client has the required method
     if not hasattr(client, "get_artists"):
@@ -689,7 +729,7 @@ def jump_command(args: JumpCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -722,8 +762,14 @@ def extract_track_position(status: PlayerStatus) -> int:
     # Use pattern matching to extract position
     match status:
         # Case 1: Position is in current_track dictionary
-        case {"current_track": {"position": position}} if isinstance(position, int):
-            return position
+        case {"current_track": {"position": position}}:
+            # Handle any numeric type (int, float, str)
+            try:
+                if isinstance(position, str):
+                    return int(float(position))
+                return int(position)
+            except (ValueError, TypeError):
+                return 0
 
         # Case 2: Extract from status text if it contains "X of Y" format
         case {"status": status_text} if (
@@ -739,6 +785,60 @@ def extract_track_position(status: PlayerStatus) -> int:
     return 0
 
 
+def with_retry(
+    func: Callable[..., Any],
+    *args: Any,
+    max_tries: int = 3,
+    retry_delay: float = 1.0,
+    fallback_func: Callable[..., Any] | None = None,
+) -> Any:
+    """Execute a function with retry logic and optional fallback.
+
+    Args:
+        func: Function to call
+        *args: Arguments to pass to the function
+        max_tries: Maximum number of retry attempts
+        retry_delay: Delay between retries in seconds
+        fallback_func: Optional fallback function to try on second attempt
+
+    Returns:
+        Result of the function call if successful
+
+    Raises:
+        Exception: The last exception encountered if all attempts fail
+    """
+    import time
+
+    last_error = None
+
+    for attempt in range(max_tries):
+        try:
+            result = func(*args)
+            return result  # Success, return the result
+        except Exception as e:
+            last_error = e
+
+            if attempt < max_tries - 1:
+                # Wait before retry, with increasing backoff
+                time.sleep(retry_delay * (attempt + 1))
+
+                # Try fallback on second attempt if provided
+                if attempt == 1 and fallback_func is not None:
+                    try:
+                        result = fallback_func(*args)
+                        return result  # Fallback succeeded
+                    except Exception:
+                        # Fallback failed, continue with normal retries
+                        pass
+
+    # If we get here, all attempts failed
+    if last_error:
+        raise last_error
+
+    # Shouldn't reach here, but just in case
+    raise Exception("All retry attempts failed without a specific error")
+
+
 def restart_track(client: ClientType, player_id: str) -> None:
     """Seek to the beginning of the current track.
 
@@ -747,10 +847,18 @@ def restart_track(client: ClientType, player_id: str) -> None:
         player_id: ID of the player
 
     Raises:
-        Exception: If seeking fails
+        Exception: If seeking fails after retry attempts
     """
-    # Use seek_to_time method
-    client.seek_to_time(player_id, 0, debug=False)
+
+    # Define the primary and fallback functions
+    def primary_seek() -> None:
+        return client.seek_to_time(player_id, 0)
+
+    def fallback_seek() -> None:
+        return client.send_command(player_id, "time", ["0"])
+
+    # Use the retry wrapper
+    with_retry(primary_seek, max_tries=3, retry_delay=0.5, fallback_func=fallback_seek)
 
 
 @dataclass
@@ -771,7 +879,7 @@ def prev_command(args: PrevCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -788,6 +896,7 @@ def prev_command(args: PrevCommandArgs) -> None:
         # If we're past the threshold, go to the beginning of the current track
         if position > threshold:
             try:
+                # Use the existing restart_track function which already uses with_retry
                 restart_track(client, player_id)
                 print(f"Restarted current track for player {player_id}")
             except Exception as e:
@@ -795,8 +904,34 @@ def prev_command(args: PrevCommandArgs) -> None:
                 sys.exit(1)
         else:
             # Otherwise, go to the previous track
-            client.send_command(player_id, "playlist", ["index", "-1"])
-            print(f"Previous track command sent to player {player_id}")
+            try:
+                # Define the relative index function (primary method)
+                def go_to_prev_track_relative() -> None:
+                    # Use "index -1" with no comma between index and -1 for relative positioning
+                    return client.send_command(player_id, "playlist", ["index -1"])
+
+                # Define the absolute index function (fallback method)
+                def go_to_prev_track_absolute() -> None:
+                    # Try with direct playlist index command
+                    curr_pos = status.get("playlist_position", 0)
+                    if curr_pos > 0:
+                        # Go to the previous track by explicit index
+                        return client.send_command(
+                            player_id, "playlist", ["index", str(curr_pos - 1)]
+                        )
+                    raise ValueError("Already at first track")
+
+                # Use the retry wrapper
+                with_retry(
+                    go_to_prev_track_relative,
+                    max_tries=3,
+                    retry_delay=0.5,
+                    fallback_func=go_to_prev_track_absolute,
+                )
+                print(f"Previous track command sent to player {player_id}")
+            except Exception as e:
+                print(f"Error sending previous track command: {e}", file=sys.stderr)
+                sys.exit(1)
 
     except Exception as e:
         print(f"Error sending previous track command: {e}", file=sys.stderr)
@@ -821,7 +956,7 @@ def now_playing_command(args: PlayerCommandArgs) -> None:
 
     try:
         # Use the show_now_playing method
-        client.show_now_playing(player_id, debug=args.debug_command)
+        client.show_now_playing(player_id)
         print(f"Now Playing screen activated for player {player_id}")
     except Exception as e:
         print(f"Error showing Now Playing screen: {e}", file=sys.stderr)
@@ -844,7 +979,7 @@ def shuffle_command(args: ShuffleCommandArgs) -> None:
     server_url = get_server_url(args.server)
     mode = args.mode
 
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -895,7 +1030,7 @@ def repeat_command(args: RepeatCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -963,7 +1098,7 @@ def remote_command(args: RemoteCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -1002,7 +1137,7 @@ def display_command(args: DisplayCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -1057,7 +1192,7 @@ def seek_command(args: SeekCommandArgs) -> None:
         args: Command-line arguments
     """
     server_url = get_server_url(args.server)
-    client = create_client(server_url)
+    client = create_client_with_error_handling(server_url)
 
     player_id = get_player_id(args, client)
     if not player_id:
@@ -1088,7 +1223,7 @@ def seek_command(args: SeekCommandArgs) -> None:
 
     try:
         # Use the seek_to_time method
-        client.seek_to_time(player_id, total_seconds, debug=args.debug_command)
+        client.seek_to_time(player_id, total_seconds)
 
         print(f"Seeked to {format_time(total_seconds)} in the current track")
     except Exception as e:
