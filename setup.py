@@ -30,6 +30,8 @@ setup(
         "tomli-w>=1.0.0",
         # curses is part of the standard library for most Python installations
     ],
+    # For Python 3.11+ tomli is not needed as the stdlib includes tomllib
+    # But we keep it for compatibility with different Python versions
     package_data={
         "squeeze": ["py.typed"],  # Indicate the package is typed
         "tests": ["py.typed"],  # Also mark tests as typed

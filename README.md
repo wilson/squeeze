@@ -4,9 +4,45 @@ A command-line utility for interacting with SqueezeBox players over the network.
 
 ## Installation
 
+### Standard Installation
 ```bash
 pip install -e .
 ```
+
+### Installation on Raspberry Pi / piCorePlayer
+
+piCorePlayer uses a minimal Linux distribution that may not have Python 3.11+ by default. Follow these steps to set up the environment:
+
+1. First, connect to your piCorePlayer device via SSH:
+   ```bash
+   ssh tc@YOUR_PI_IP_ADDRESS
+   ```
+
+2. Install Python 3.11 using piCore's package manager:
+   ```bash
+   tce-load -wi python3.11
+   ```
+
+3. Ensure pip is installed:
+   ```bash
+   tce-load -wi python3.11-pip
+   ```
+
+4. Install the squeeze package:
+   ```bash
+   pip3 install git+https://github.com/wilson/squeeze.git
+   ```
+
+5. Make your changes persistent (so they survive reboots):
+   ```bash
+   filetool.sh -b
+   ```
+
+Note: If you encounter issues with Python version availability, you have a few options:
+
+1. Use a virtual environment with a newer Python version
+2. Use Docker to run squeeze in a container
+3. For advanced users, you can modify the code to work with an earlier Python version (mainly by changing the type annotations and using `dict` instead of `dict[str, Any]` format)
 
 ## Configuration
 
@@ -146,6 +182,15 @@ squeeze server
 ## Development
 
 This project requires Python 3.11 or higher.
+
+### Platform-Specific Notes
+
+#### Raspberry Pi / piCorePlayer
+
+- piCorePlayer is designed to be minimalist, so it may not have all dependencies by default
+- Python packages installed with pip may not persist across reboots unless you run `filetool.sh -b`
+- For performance reasons, consider setting up a lightweight caching mechanism if you're polling server status frequently
+- Terminal capabilities may be limited, so certain UI features might not work as expected
 
 ### Version History
 
