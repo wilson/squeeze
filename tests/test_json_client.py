@@ -184,3 +184,208 @@ def test_seek_to_time(json_client: SqueezeJsonClient) -> None:
         mock_send_request.reset_mock()
         json_client.seek_to_time("00:11:22:33:44:55", 30)
         mock_send_request.assert_called_once_with("00:11:22:33:44:55", "time", "30")
+
+
+def test_set_volume(json_client: SqueezeJsonClient) -> None:
+    """Test set_volume method."""
+    # Patch the _send_request method
+    with patch.object(json_client, "_send_request") as mock_send_request:
+        # Configure the mock response
+        mock_send_request.return_value = {"result": {}}
+
+        # Test setting volume to 0
+        json_client.set_volume("00:11:22:33:44:55", 0)
+        mock_send_request.assert_called_once_with(
+            "00:11:22:33:44:55", "mixer", "volume", "0"
+        )
+
+        # Reset mock and test setting volume to 50
+        mock_send_request.reset_mock()
+        json_client.set_volume("00:11:22:33:44:55", 50)
+        mock_send_request.assert_called_once_with(
+            "00:11:22:33:44:55", "mixer", "volume", "50"
+        )
+
+        # Reset mock and test setting volume to 100
+        mock_send_request.reset_mock()
+        json_client.set_volume("00:11:22:33:44:55", 100)
+        mock_send_request.assert_called_once_with(
+            "00:11:22:33:44:55", "mixer", "volume", "100"
+        )
+
+        # Reset mock and test debug flag
+        mock_send_request.reset_mock()
+        json_client.set_volume("00:11:22:33:44:55", 75, debug=True)
+        mock_send_request.assert_called_once_with(
+            "00:11:22:33:44:55", "mixer", "volume", "75"
+        )
+
+
+def test_power_command(json_client: SqueezeJsonClient) -> None:
+    """Test power command."""
+    # Patch the _send_request method
+    with patch.object(json_client, "_send_request") as mock_send_request:
+        # Configure the mock response
+        mock_send_request.return_value = {"result": {}}
+
+        # Test turning power off
+        json_client.send_command("00:11:22:33:44:55", "power", ["0"])
+        mock_send_request.assert_called_once_with("00:11:22:33:44:55", "power", "0")
+
+        # Reset mock and test turning power on
+        mock_send_request.reset_mock()
+        json_client.send_command("00:11:22:33:44:55", "power", ["1"])
+        mock_send_request.assert_called_once_with("00:11:22:33:44:55", "power", "1")
+
+
+def test_get_library_info(json_client: SqueezeJsonClient) -> None:
+    """Test get_library_info method."""
+    # Patch the _send_request method
+    with patch.object(json_client, "_send_request") as mock_send_request:
+        # Configure the mock response with artist results
+        artist_response = {
+            "result": {
+                "count": 2,
+                "artists_loop": [
+                    {"contributor": "Artist 1", "contributor_id": 123},
+                    {"contributor": "Artist 2", "contributor_id": 456},
+                ],
+            }
+        }
+
+        # Configure the mock response for albums
+        album_response = {
+            "result": {
+                "count": 2,
+                "albums_loop": [
+                    {"album": "Album 1", "album_id": 789},
+                    {"album": "Album 2", "album_id": 101},
+                ],
+            }
+        }
+
+        # Configure the mock response for tracks
+        track_response = {
+            "result": {
+                "count": 2,
+                "tracks_loop": [
+                    {"track": "Track 1", "track_id": 112},
+                    {"track": "Track 2", "track_id": 113},
+                ],
+            }
+        }
+
+        # Test basic library info retrieval
+        mock_send_request.return_value = artist_response
+        results = json_client.get_library_info("artists", 0, 100)
+        mock_send_request.assert_called_once_with(None, "artists", "0", "100")
+        assert results == artist_response["result"]["artists_loop"]
+
+        # Test with additional parameters
+        mock_send_request.reset_mock()
+        mock_send_request.return_value = artist_response
+        results = json_client.get_library_info("artists", 0, 100, search="test")
+        mock_send_request.assert_called_once_with(
+            None, "artists", "0", "100", "search:test"
+        )
+
+        # Test get_artists method
+        mock_send_request.reset_mock()
+        mock_send_request.return_value = artist_response
+        results = json_client.get_artists(0, 100, search="test")
+        mock_send_request.assert_called_once_with(
+            None, "artists", "0", "100", "search:test"
+        )
+
+        # Test get_albums method
+        mock_send_request.reset_mock()
+        mock_send_request.return_value = album_response
+        results = json_client.get_albums(0, 100, artist_id="123", search="test")
+        mock_send_request.assert_called_once_with(
+            None, "albums", "0", "100", "artist_id:123", "search:test"
+        )
+
+        # Test get_tracks method
+        mock_send_request.reset_mock()
+        mock_send_request.return_value = track_response
+        results = json_client.get_tracks(0, 100, album_id="789", search="test")
+        mock_send_request.assert_called_once_with(
+            None, "tracks", "0", "100", "album_id:789", "search:test"
+        )
+
+
+def test_get_server_status(json_client: SqueezeJsonClient) -> None:
+    """Test get_server_status method."""
+    # Patch the _send_request method
+    with patch.object(json_client, "_send_request") as mock_send_request:
+        # Configure the mock response
+        mock_send_request.return_value = {
+            "result": {
+                "version": "8.0.0",
+                "uuid": "abcdef1234567890",
+                "mac": "00:11:22:33:44:55",
+                "ip": "192.168.1.100",
+                "name": "Squeezebox Server",
+                "info total albums": "1000",
+                "info total artists": "500",
+                "info total songs": "10000",
+                "info total duration": "5000000",  # In seconds
+                "player count": "3",
+                "players_loop": [
+                    {"playerid": "00:11:22:33:44:55"},
+                    {"playerid": "aa:bb:cc:dd:ee:ff"},
+                    {"playerid": "11:22:33:44:55:66"},
+                ],
+            }
+        }
+
+        # Call the method
+        result = json_client.get_server_status()
+
+        # Verify the request was made correctly
+        mock_send_request.assert_called_once_with(None, "serverstatus", 0, 100)
+
+        # Verify the result structure
+        assert result["version"] == "8.0.0"
+        assert result["name"] == "Squeezebox Server"
+        assert result["uuid"] == "abcdef1234567890"
+        assert result["mac"] == "00:11:22:33:44:55"
+        assert result["ip"] == "192.168.1.100"
+
+        # Verify player count
+        assert result["player_count"] == 3
+
+
+def test_playlist_commands(json_client: SqueezeJsonClient) -> None:
+    """Test playlist-related commands."""
+    # Patch the _send_request method
+    with patch.object(json_client, "_send_request") as mock_send_request:
+        # Configure the mock response
+        mock_send_request.return_value = {"result": {}}
+
+        # Test shuffle commands
+        json_client.send_command("00:11:22:33:44:55", "playlist", ["shuffle", "0"])
+        mock_send_request.assert_called_once_with(
+            "00:11:22:33:44:55", "playlist", "shuffle", "0"
+        )
+
+        # Reset mock and test shuffle songs
+        mock_send_request.reset_mock()
+        json_client.send_command("00:11:22:33:44:55", "playlist", ["shuffle", "1"])
+        mock_send_request.assert_called_once_with(
+            "00:11:22:33:44:55", "playlist", "shuffle", "1"
+        )
+
+        # Reset mock and test repeat commands
+        mock_send_request.reset_mock()
+        json_client.send_command("00:11:22:33:44:55", "playlist", ["repeat", "0"])
+        mock_send_request.assert_called_once_with(
+            "00:11:22:33:44:55", "playlist", "repeat", "0"
+        )
+
+        # Reset mock and test repeat one
+        mock_send_request.reset_mock()
+        json_client.send_command("00:11:22:33:44:55", "playlist", ["repeat", "1"])
+        mock_send_request.assert_called_once_with(
+            "00:11:22:33:44:55", "playlist", "repeat", "1"
+        )
