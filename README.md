@@ -115,6 +115,16 @@ squeeze server
 
 This project requires Python 3.11 or higher.
 
+### Version History
+
+- v0.2.0 - Breaking changes:
+  - Removed backward compatibility layer (`client.py`)
+  - Direct imports from `squeeze.client` should be changed to `squeeze.html_client`
+  - Renamed `SqueezeClient` to `SqueezeHtmlClient` for clarity
+  - Added pre-commit hooks for code quality
+
+- v0.1.0 - Initial release
+
 ### Code Style and Linting
 
 We use pre-commit hooks to maintain code quality. To set up the pre-commit hooks, run:
@@ -126,9 +136,9 @@ pre-commit install
 
 The pre-commit hooks enforce:
 - Black for code formatting
-- isort for import sorting 
+- isort for import sorting
 - ruff for linting
-- mypy for type checking (currently disabled in pre-commit hooks)
+- mypy for type checking
 
 You can manually run all checks with:
 
