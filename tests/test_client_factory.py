@@ -22,10 +22,12 @@ class TestCreateClient:
     def test_create_client_success(self, server_url: str) -> None:
         """Test creating a client when the API is available."""
         with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value = None  # Successful response
             client = create_client(server_url)
             assert isinstance(client, SqueezeJsonClient)
             assert client.server_url == server_url
-            mock_urlopen.assert_called_once()
+            # Now we make multiple calls for retries and fallbacks, so we can't assert called once
+            assert mock_urlopen.call_count >= 1
 
     def test_create_client_http_error(self, server_url: str) -> None:
         """Test creating a client when the API returns HTTP error."""
@@ -34,39 +36,64 @@ class TestCreateClient:
             from http.client import HTTPMessage
 
             headers = HTTPMessage()
-            mock_urlopen.side_effect = urllib.error.HTTPError(
-                url=f"{server_url}/jsonrpc.js",
-                code=404,
-                msg="Not Found",
-                hdrs=headers,
-                fp=None,
-            )
+            # First call succeeds (server check) then all endpoints fail with 404
+            mock_urlopen.side_effect = [
+                None,  # Success for base URL check
+                urllib.error.HTTPError(
+                    url=f"{server_url}/jsonrpc.js",
+                    code=404,
+                    msg="Not Found",
+                    hdrs=headers,
+                    fp=None,
+                ),
+                urllib.error.HTTPError(
+                    url=f"{server_url}/rpc/json",
+                    code=404,
+                    msg="Not Found",
+                    hdrs=headers,
+                    fp=None,
+                ),
+                urllib.error.HTTPError(
+                    url=f"{server_url}/api",
+                    code=404,
+                    msg="Not Found",
+                    hdrs=headers,
+                    fp=None,
+                ),
+            ]
             with pytest.raises(ConnectionError) as excinfo:
                 create_client(server_url)
-            # Updated assertion to match new error format from pattern matching
-            assert "API endpoint not found" in str(excinfo.value)
+            # Updated assertion to match new error format
+            assert "No valid API endpoint found" in str(excinfo.value)
 
     def test_create_client_url_error(self, server_url: str) -> None:
         """Test creating a client when the API connection fails."""
         with patch("urllib.request.urlopen") as mock_urlopen:
+            # Since we've updated client_factory.py to check the base URL first,
+            # we need to simulate that failing immediately
             mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
             with pytest.raises(ConnectionError) as excinfo:
                 create_client(server_url)
-            assert "Failed to connect to server" in str(excinfo.value)
+            assert "Server is not responding" in str(excinfo.value)
             assert "Connection refused" in str(excinfo.value)
 
     def test_create_client_generic_error(self, server_url: str) -> None:
         """Test creating a client when a generic error occurs."""
         with patch("urllib.request.urlopen") as mock_urlopen:
+            # Since we've updated client_factory.py to check the base URL first,
+            # we need to simulate that failing immediately
             mock_urlopen.side_effect = Exception("Something went wrong")
             with pytest.raises(ConnectionError) as excinfo:
                 create_client(server_url)
-            assert "Failed to connect to server" in str(excinfo.value)
+            assert "Server is not responding" in str(excinfo.value)
             assert "Something went wrong" in str(excinfo.value)
 
     def test_url_trailing_slash_handling(self) -> None:
         """Test handling of URLs with and without trailing slashes."""
-        with patch("urllib.request.urlopen"):
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            # Need to mock successful responses for both URL versions
+            mock_urlopen.return_value = None  # Successful response
+
             # URL with trailing slash
             client1 = create_client("http://example.com:9000/")
             # URL without trailing slash

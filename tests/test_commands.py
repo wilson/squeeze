@@ -208,11 +208,18 @@ def test_status_command_live_mode(mock_json_client: MagicMock, player_id: str) -
         patch("squeeze.cli.commands.get_server_url") as mock_get_url,
         patch("squeeze.cli.commands.create_client") as mock_create_client,
         patch("squeeze.cli.commands.get_player_id") as mock_get_player_id,
+        # Patch the keyboard functions to avoid stdin issues in tests
+        patch(
+            "squeeze.cli.commands.is_keystroke_module_available"
+        ) as mock_keyboard_check,
+        patch("squeeze.cli.commands.get_keypress") as mock_get_keypress,
     ):
         # Configure mocks
         mock_get_url.return_value = "http://example.com:9000"
         mock_create_client.return_value = mock_json_client
         mock_get_player_id.return_value = player_id
+        mock_keyboard_check.return_value = False  # Disable keyboard in tests
+        mock_get_keypress.return_value = None  # No keypress
 
         # We'll patch the hasattr and isinstance functions to make our type checks pass
         # This avoids the type error with __class__ assignment
@@ -224,7 +231,8 @@ def test_status_command_live_mode(mock_json_client: MagicMock, player_id: str) -
             # Configure mocks to pass the type checks in the code
             mock_hasattr.side_effect = lambda obj, attr: (
                 True
-                if obj is mock_json_client and attr == "get_player_status"
+                if obj is mock_json_client
+                and attr in ["get_player_status", "send_command"]
                 else hasattr(obj, attr)
             )
             mock_isinstance.side_effect = lambda obj, cls: (
