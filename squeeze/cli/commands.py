@@ -801,9 +801,9 @@ def display_live_status(
                 # For devices with 0 volume (likely external control)
                 vol_controls = f"{BOLD}v{RESET} (try vol reset)"
 
-            # Display all controls
+            # Display all controls - removed 's' since left arrow/p already handle restart
             print(
-                f"{BOLD}KEYS:{RESET} {BOLD}p/←{RESET} (prev) {BOLD}n/→{RESET} (next) {vol_controls} {BOLD}s{RESET} (restart) {BOLD}q{RESET} (quit)"
+                f"{BOLD}KEYS:{RESET} {BOLD}p/←{RESET} (prev/restart) {BOLD}n/→{RESET} (next) {vol_controls} {BOLD}q{RESET} (quit)"
             )
         else:
             # Plain text controls based on volume capability
@@ -812,7 +812,7 @@ def display_live_status(
             else:
                 vol_controls = "v (try vol reset)"
 
-            print(f"KEYS: p/← (prev) n/→ (next) {vol_controls} s (restart) q (quit)")
+            print(f"KEYS: p/← (prev/restart) n/→ (next) {vol_controls} q (quit)")
         print("")
 
     # Setup for keyboard input
@@ -1001,9 +1001,8 @@ def display_live_status(
                             display_simple_status(status, use_color=use_color)
                         key_pressed = True
 
-                    elif key == "s":  # Restart track
-                        client.send_command(player_id, "time", ["0"])
-                        key_pressed = True
+                    # The 's' key for restart has been removed as redundant
+                    # Left arrow/p already handle this functionality
 
                     elif key == "v":  # Volume reset to 100% for external volume devices
                         volume_val = status.get("volume", 0)
