@@ -1098,36 +1098,17 @@ def with_retry(
     Raises:
         Exception: The last exception encountered if all attempts fail
     """
-    import time
+    # Import the unified retry implementation
+    from squeeze.retry import retry_operation
 
-    last_error = None
-
-    for attempt in range(max_tries):
-        try:
-            result = func(*args)
-            return result  # Success, return the result
-        except Exception as e:
-            last_error = e
-
-            if attempt < max_tries - 1:
-                # Wait before retry, with increasing backoff
-                time.sleep(retry_delay * (attempt + 1))
-
-                # Try fallback on second attempt if provided
-                if attempt == 1 and fallback_func is not None:
-                    try:
-                        result = fallback_func(*args)
-                        return result  # Fallback succeeded
-                    except Exception:
-                        # Fallback failed, continue with normal retries
-                        pass
-
-    # If we get here, all attempts failed
-    if last_error:
-        raise last_error
-
-    # Shouldn't reach here, but just in case
-    raise Exception("All retry attempts failed without a specific error")
+    # Call the unified implementation
+    return retry_operation(
+        func,
+        *args,
+        max_tries=max_tries,
+        retry_delay=retry_delay,
+        fallback_func=fallback_func,
+    )
 
 
 def restart_track(client: ClientType, player_id: str) -> None:

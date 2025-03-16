@@ -3,11 +3,11 @@ Factory module for creating a SqueezeBox JSON client.
 """
 
 import http.client
-import time
 import urllib.request
 
 from squeeze.exceptions import ConnectionError
 from squeeze.json_client import SqueezeJsonClient
+from squeeze.retry import retry_operation
 
 
 def create_client(
@@ -26,17 +26,19 @@ def create_client(
     Raises:
         ConnectionError: If unable to connect to the server after all retries
     """
-    last_error: Exception | None = None
-
     # Check if server URL ends with port
     base_url = server_url.rstrip("/")
 
     # Try to verify server is running by checking the base URL first
     try:
-        # Just check if the server responds at all
-        req = urllib.request.Request(base_url, method="HEAD")
-        urllib.request.urlopen(req, timeout=5)
-        # If we get here, server is responding, so we can try the JSON endpoint
+        # Define a function to check base URL
+        def check_base_url() -> bool:
+            req = urllib.request.Request(base_url, method="HEAD")
+            urllib.request.urlopen(req, timeout=5)
+            return True
+
+        # Attempt with single try since this is just a sanity check
+        check_base_url()
     except Exception as e:
         # If we can't connect to the base URL, server is probably down
         raise ConnectionError(f"Server is not responding: {str(e)}")
@@ -48,61 +50,72 @@ def create_client(
         "/api",  # Another possible endpoint
     ]
 
-    # Try all endpoints with retries
+    last_error: Exception | None = None
+
+    # Try each endpoint
     for endpoint in endpoints:
-        endpoint_attempted = False
-        for attempt in range(max_retries):
+        # Define a function to try this endpoint with endpoint captured in closure
+        def try_endpoint(current_endpoint: str = endpoint) -> bool:
+            nonlocal last_error
+
             try:
-                json_url = f"{base_url}{endpoint}"
-                # Silently try each endpoint
+                json_url = f"{base_url}{current_endpoint}"
                 req = urllib.request.Request(
                     json_url, headers={"Accept": "application/json"}, method="HEAD"
                 )
-                # Increase timeout to 5 seconds for better reliability
                 urllib.request.urlopen(req, timeout=5)
-
-                # If we reach here, endpoint works!
-                # Create client with the working endpoint path
-                return SqueezeJsonClient(base_url, api_path=endpoint)
+                return True  # Success
 
             except urllib.error.HTTPError as e:
                 # Don't retry authentication errors
-                endpoint_attempted = True
-                # Pattern matching with better compatibility
                 match e.code:
                     case 401 | 403:
                         raise ConnectionError(f"Authentication required: HTTP {e.code}")
                     case 404:
                         # This endpoint doesn't exist, try next one
                         last_error = e
-                        break  # Break out of retry loop for this endpoint
+                        return False  # Clear failure, don't retry
                     case _:
                         last_error = e
+                        raise  # Will be caught and retried
 
             except (urllib.error.URLError, http.client.RemoteDisconnected) as e:
-                # These are network errors that might be transient, so we'll retry
-                endpoint_attempted = True
+                # These are network errors that might be transient
                 last_error = e
+                raise  # Will be caught and retried
 
-            except Exception as e:
-                # Other unexpected errors, retry with caution
-                endpoint_attempted = True
-                last_error = e
+        # Try this endpoint with retries
+        try:
+            result = retry_operation(
+                try_endpoint,
+                max_tries=max_retries,
+                retry_delay=retry_delay,
+                backoff_factor=1.5,
+                retry_exceptions=(
+                    urllib.error.URLError,
+                    http.client.RemoteDisconnected,
+                    Exception,
+                ),
+                no_retry_exceptions=(ConnectionError,),
+            )
 
-            # Only sleep if we're going to retry this endpoint
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
+            # If we succeeded, create client with the working endpoint
+            if result:
+                return SqueezeJsonClient(base_url, api_path=endpoint)
 
-        # If we tried the endpoint and got something other than a 404, it might work with the client
-        if endpoint_attempted and (
+        except Exception:
+            # Endpoint failed after retries, try the next one
+            pass
+
+        # If we got something other than a 404 for this endpoint, it might work with POST
+        if last_error and (
             not isinstance(last_error, urllib.error.HTTPError)
             or getattr(last_error, "code", 0) != 404
         ):
-            # We might have a valid endpoint but connection issues
-            # Try creating client anyway - it might work for POST requests even if HEAD fails
+            # Try creating client anyway - POST might work even if HEAD fails
             return SqueezeJsonClient(base_url, api_path=endpoint)
 
-    # If we've exhausted all endpoints and retries, raise the appropriate error
+    # If we've exhausted all endpoints, raise the appropriate error
     if isinstance(last_error, urllib.error.HTTPError):
         if last_error.code == 404:
             raise ConnectionError(
@@ -111,15 +124,12 @@ def create_client(
         else:
             raise ConnectionError(f"API not available: HTTP error {last_error.code}")
     elif isinstance(last_error, urllib.error.URLError):
-        reason = (
-            str(last_error.reason) if hasattr(last_error, "reason") else str(last_error)
-        )
+        reason = getattr(last_error, "reason", str(last_error))
         raise ConnectionError(f"Failed to connect to server: {reason}")
     elif isinstance(last_error, http.client.RemoteDisconnected):
-        # Try one last approach - just create the client and let it try to POST even if HEAD fails
+        # Try one last approach with default endpoint
         return SqueezeJsonClient(base_url)
     elif last_error:
         raise ConnectionError(f"Failed to connect to server: {str(last_error)}")
     else:
-        # This should never happen, but just in case
         raise ConnectionError("Failed to connect to server")
