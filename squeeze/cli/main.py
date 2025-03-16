@@ -98,6 +98,11 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Live mode - continuously display player status with updates",
     )
+    status_parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable colored output",
+    )
 
     # Search command
     search_parser = subparsers.add_parser(
@@ -460,12 +465,14 @@ def main(args: list[str] | None = None) -> int:
     # Create the appropriate dataclass based on the command and dispatch
     if parsed_args.command == "status":
         live = args_dict.get("live", False)
+        no_color = args_dict.get("no_color", False)
         status_args = StatusCommandArgs(
             server=server,
             player_id=player_id,
             interactive=interactive,
             no_interactive=no_interactive,
             live=live,
+            no_color=no_color,
         )
         status_command(status_args)
     elif parsed_args.command == "players":

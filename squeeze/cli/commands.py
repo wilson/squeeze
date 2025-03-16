@@ -71,6 +71,7 @@ class StatusCommandArgs(PlayerCommandArgs):
     """Arguments for the status command."""
 
     live: bool = False
+    no_color: bool = False
 
 
 @dataclass
@@ -322,20 +323,41 @@ def display_progress_bar(
         pass
 
 
+# Define ANSI color codes - safe for most terminals including MacOS Terminal
+RESET = "\033[0m"
+BOLD = "\033[1m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+CYAN = "\033[36m"
+RED = "\033[31m"
+BRIGHT_GREEN = "\033[92m"
+BRIGHT_YELLOW = "\033[93m"
+BRIGHT_BLUE = "\033[94m"
+
+
 def format_player_status(
-    status: PlayerStatus, show_all_track_fields: bool = False
+    status: PlayerStatus, show_all_track_fields: bool = False, use_color: bool = True
 ) -> list[str]:
     """Format player status into a list of strings.
 
     Args:
         status: Player status dictionary
         show_all_track_fields: Whether to display all track fields or only priority ones
+        use_color: Whether to use ANSI colors in the output
 
     Returns:
         List of formatted strings representing the player status
     """
     # Initialize the result list
     lines = []
+
+    # Helper function to apply color conditionally
+    def colorize(text: str, color: str) -> str:
+        if use_color:
+            return f"{color}{text}{RESET}"
+        return text
 
     # Extract basic player information
     player_name = status.get("player_name", "Unknown")
@@ -354,28 +376,66 @@ def format_player_status(
     else:
         volume_display = f"{volume}%"
 
+    # Format values with colors based on their status
+    player_name_display = colorize(player_name, BOLD + CYAN)
+
+    if power == "on":
+        power_display = colorize(power, GREEN)
+    else:
+        power_display = colorize(power, RED)
+
+    if play_status.lower() == "playing" or play_status == "Now Playing":
+        status_display = colorize(play_status, BRIGHT_GREEN)
+    elif play_status.lower() == "paused":
+        status_display = colorize(play_status, YELLOW)
+    elif play_status.lower() == "stopped":
+        status_display = colorize(play_status, RED)
+    else:
+        status_display = colorize(play_status, RESET)
+
+    # Use consistent field width for all player information (10 chars)
+    player_label = colorize("PLAYER:".ljust(10), BOLD)
+    id_label = colorize("ID:".ljust(10), BOLD)
+    power_label = colorize("POWER:".ljust(10), BOLD)
+    status_label = colorize("STATUS:".ljust(10), BOLD)
+    volume_label = colorize("VOLUME:".ljust(10), BOLD)
+
     # Add basic player information
-    lines.append(f"PLAYER:   {player_name}")
-    lines.append(f"ID:       {player_id_str}")
-    lines.append(f"POWER:    {power}")
-    lines.append(f"STATUS:   {play_status}")
-    lines.append(f"VOLUME:   {volume_display}")
+    lines.append(f"{player_label} {player_name_display}")
+    lines.append(f"{id_label} {player_id_str}")
+    lines.append(f"{power_label} {power_display}")
+    lines.append(f"{status_label} {status_display}")
+    lines.append(f"{volume_label} {colorize(volume_display, CYAN)}")
 
     # Print shuffle and repeat if available
     if "shuffle_mode" in status:
-        lines.append(f"SHUFFLE:  {status['shuffle_mode']}")
+        shuffle_value = status["shuffle_mode"]
+        shuffle_display = colorize(
+            shuffle_value, CYAN if shuffle_value != "off" else RESET
+        )
+        shuffle_label = colorize("SHUFFLE:".ljust(10), BOLD)
+        lines.append(f"{shuffle_label} {shuffle_display}")
+
     if "repeat_mode" in status:
-        lines.append(f"REPEAT:   {status['repeat_mode']}")
+        repeat_value = status["repeat_mode"]
+        repeat_display = colorize(
+            repeat_value, CYAN if repeat_value != "off" else RESET
+        )
+        repeat_label = colorize("REPEAT:".ljust(10), BOLD)
+        lines.append(f"{repeat_label} {repeat_display}")
 
     # Print playlist info if available
     if "playlist_count" in status and status["playlist_count"] > 0:
         playlist_pos = status.get("playlist_position", 0) + 1
         playlist_count = status.get("playlist_count", 0)
-        lines.append(f"PLAYLIST: {playlist_pos} of {playlist_count}")
+        position_display = colorize(str(playlist_pos), YELLOW)
+        count_display = colorize(str(playlist_count), CYAN)
+        playlist_label = colorize("PLAYLIST:".ljust(10), BOLD)
+        lines.append(f"{playlist_label} {position_display} of {count_display}")
 
     # Add separator for current track
     lines.append("")
-    lines.append("------ CURRENT TRACK ------")
+    lines.append(colorize("------ CURRENT TRACK ------", BOLD + BLUE))
     lines.append("")
 
     # Display current track information
@@ -401,7 +461,20 @@ def format_player_status(
                         value = "0:00"
                 else:
                     value = current_track[field]
-                lines.append(f"{field.upper()}:    {value}")
+
+                # Apply color based on field type
+                if field == "title":
+                    value_display = colorize(value, BOLD + BRIGHT_YELLOW)
+                elif field == "artist":
+                    value_display = colorize(value, BRIGHT_GREEN)
+                elif field == "album":
+                    value_display = colorize(value, BRIGHT_BLUE)
+                else:
+                    value_display = colorize(value, CYAN)
+
+                # Create field label with consistent width (10 chars)
+                field_label = colorize(f"{field.upper()}:".ljust(10), BOLD)
+                lines.append(f"{field_label} {value_display}")
 
         # Add progress bar if position and duration are available
         try:
@@ -409,26 +482,35 @@ def format_player_status(
             duration = float(current_track.get("duration", 0))
 
             if duration > 0:
-                lines.append(
-                    f"TIME:     {format_time_simple(position)} / {format_time_simple(duration)}"
-                )
+                pos_display = colorize(format_time_simple(position), CYAN)
+                dur_display = colorize(format_time_simple(duration), CYAN)
+                # Use consistent padding for TIME field
+                time_label = colorize("TIME:".ljust(10), BOLD)
+                lines.append(f"{time_label} {pos_display} / {dur_display}")
 
-                # Simple progress bar
+                # Simple progress bar with colored components
                 percent = min(100, int((position / duration) * 100))
                 bar_width = 30
                 filled_width = int(bar_width * percent / 100)
-                bar = f"[{'#' * filled_width}{'-' * (bar_width - filled_width)}] {percent}%"
-                lines.append(f"PROGRESS: {bar}")
+
+                if use_color:
+                    bar = f"[{GREEN}{'█' * filled_width}{RESET}{BLUE}{'▒' * (bar_width - filled_width)}{RESET}] {YELLOW}{percent}%{RESET}"
+                else:
+                    bar = f"[{'#' * filled_width}{'-' * (bar_width - filled_width)}] {percent}%"
+
+                # Use consistent padding for PROGRESS field
+                progress_label = colorize("PROGRESS:".ljust(10), BOLD)
+                lines.append(f"{progress_label} {bar}")
         except (ValueError, TypeError):
             pass
 
         # Then add any remaining fields if requested
         if show_all_track_fields:
             lines.append("")
-            lines.append("Additional track information:")
+            lines.append(colorize("Additional track information:", BOLD))
             for key, value in current_track.items():
                 if key not in priority_fields and key != "artwork":
-                    lines.append(f"  {key.capitalize()}: {value}")
+                    lines.append(f"  {colorize(key.capitalize() + ':', CYAN)} {value}")
 
     return lines
 
@@ -450,19 +532,25 @@ def format_time_simple(seconds: float) -> str:
 
 
 def print_player_status(
-    status: PlayerStatus, show_all_track_fields: bool = False
+    status: PlayerStatus, show_all_track_fields: bool = False, use_color: bool = True
 ) -> None:
     """Print player status in a formatted way.
 
     Args:
         status: Player status dictionary
         show_all_track_fields: Whether to display all track fields or only priority ones
+        use_color: Whether to use ANSI colors in the output
     """
     # Get formatted status as a list of strings
-    status_lines = format_player_status(status, show_all_track_fields)
+    status_lines = format_player_status(status, show_all_track_fields, use_color)
 
-    # Print the formatted status
-    print("====== SQUEEZE STATUS ======")
+    # Print the formatted status with color if enabled
+    header = (
+        f"{BOLD}{BLUE}====== SQUEEZE STATUS ======{RESET}"
+        if use_color
+        else "====== SQUEEZE STATUS ======"
+    )
+    print(header)
     print("")
     for line in status_lines:
         print(line)
@@ -611,7 +699,9 @@ def get_keypress(timeout: float = 0.1) -> str | None:
     return None
 
 
-def display_live_status(client: ClientType, player_id: str) -> None:
+def display_live_status(
+    client: ClientType, player_id: str, use_color: bool = True
+) -> None:
     """Display continuously updating status with terminal formatting.
 
     Provides a structured terminal UI that works reliably across different terminal types.
@@ -620,6 +710,7 @@ def display_live_status(client: ClientType, player_id: str) -> None:
     Args:
         client: Squeeze client instance
         player_id: ID of the player to get status for
+        use_color: Whether to use ANSI colors in the display
     """
     import os
     import select
@@ -647,16 +738,23 @@ def display_live_status(client: ClientType, player_id: str) -> None:
             os.system("clear")
 
     # Display status information in a simple format
-    def display_simple_status(status: PlayerStatus) -> None:
+    def display_simple_status(status: PlayerStatus, use_color: bool = True) -> None:
         """Display status with simple text formatting."""
         # Clear screen
         clear_screen()
 
         # Get formatted status lines
-        status_lines = format_player_status(status, show_all_track_fields=False)
+        status_lines = format_player_status(
+            status, show_all_track_fields=False, use_color=use_color
+        )
 
-        # Print header
-        print("====== SQUEEZE STATUS ====== (q=quit)")
+        # Print header with color if enabled
+        header = (
+            f"{BOLD}{BLUE}====== SQUEEZE STATUS ====== (q=quit){RESET}"
+            if use_color
+            else "====== SQUEEZE STATUS ====== (q=quit)"
+        )
+        print(header)
         print("")
 
         # Print the formatted status lines
@@ -665,7 +763,15 @@ def display_live_status(client: ClientType, player_id: str) -> None:
 
         # Add keyboard controls info
         print("")
-        print("KEYS: p/← (prev) n/→ (next) +/↑ (vol+) -/↓ (vol-) s (restart) q (quit)")
+        if use_color:
+            # Colorize the keyboard controls for better visibility
+            print(
+                f"{BOLD}KEYS:{RESET} {YELLOW}p/←{RESET} (prev) {CYAN}n/→{RESET} (next) {GREEN}+/↑{RESET} (vol+) {RED}-/↓{RESET} (vol-) {MAGENTA}s{RESET} (restart) {BOLD}q{RESET} (quit)"
+            )
+        else:
+            print(
+                "KEYS: p/← (prev) n/→ (next) +/↑ (vol+) -/↓ (vol-) s (restart) q (quit)"
+            )
         print("")
 
     # Setup for keyboard input
@@ -703,8 +809,8 @@ def display_live_status(client: ClientType, player_id: str) -> None:
                 # Get player status
                 status = client.get_player_status(player_id)
 
-                # Use the simple display function
-                display_simple_status(status)
+                # Use the simple display function with color if enabled
+                display_simple_status(status, use_color=use_color)
 
                 # Extract data for key handling
                 current_track = status.get("current_track", {})
@@ -744,7 +850,7 @@ def display_live_status(client: ClientType, player_id: str) -> None:
                                     )
                                     # Force an immediate status refresh
                                     status = client.get_player_status(player_id)
-                                    display_simple_status(status)
+                                    display_simple_status(status, use_color=use_color)
                                 else:
                                     client.send_command(player_id, "time", ["0"])
 
@@ -754,7 +860,7 @@ def display_live_status(client: ClientType, player_id: str) -> None:
                                 )
                                 # Force an immediate status refresh
                                 status = client.get_player_status(player_id)
-                                display_simple_status(status)
+                                display_simple_status(status, use_color=use_color)
 
                             elif arrow == b"H":  # Up
                                 try:
@@ -796,7 +902,7 @@ def display_live_status(client: ClientType, player_id: str) -> None:
                             client.send_command(player_id, "playlist", ["index", "-1"])
                             # Force immediate refresh
                             status = client.get_player_status(player_id)
-                            display_simple_status(status)
+                            display_simple_status(status, use_color=use_color)
                         else:
                             client.send_command(player_id, "time", ["0"])
                         key_pressed = True
@@ -805,7 +911,7 @@ def display_live_status(client: ClientType, player_id: str) -> None:
                         client.send_command(player_id, "playlist", ["index", "+1"])
                         # Force immediate refresh
                         status = client.get_player_status(player_id)
-                        display_simple_status(status)
+                        display_simple_status(status, use_color=use_color)
                         key_pressed = True
 
                     elif key == "+" or key == "up":  # Volume up
@@ -883,6 +989,7 @@ def status_command(args: StatusCommandArgs) -> None:
     """
     server_url = get_server_url(args.server)
     live_mode = args.live
+    use_color = not args.no_color
     client = create_client_with_error_handling(server_url)
 
     # Use the common get_player_id helper
@@ -896,12 +1003,13 @@ def status_command(args: StatusCommandArgs) -> None:
 
     # Handle live mode vs. one-time status display
     if live_mode:
-        display_live_status(client, player_id)
+        # Pass no_color option to display_live_status
+        display_live_status(client, player_id, use_color=use_color)
     else:
         # Single status display
         try:
             status = client.get_player_status(player_id)
-            print_player_status(status, show_all_track_fields=True)
+            print_player_status(status, show_all_track_fields=True, use_color=use_color)
         except (ConnectionError, APIError, ParseError, CommandError) as e:
             print(f"Error getting player status: {e}", file=sys.stderr)
             sys.exit(1)
