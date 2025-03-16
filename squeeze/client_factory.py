@@ -68,6 +68,7 @@ def create_client(
             except urllib.error.HTTPError as e:
                 # Don't retry authentication errors
                 endpoint_attempted = True
+                # Pattern matching with better compatibility
                 match e.code:
                     case 401 | 403:
                         raise ConnectionError(f"Authentication required: HTTP {e.code}")

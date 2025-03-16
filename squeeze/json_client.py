@@ -8,13 +8,13 @@ import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, NotRequired, Self, TypedDict
+from typing import Any, NotRequired, Self, TypeAlias, TypedDict
 
 from squeeze.constants import PlayerMode, PowerState, RepeatMode, ShuffleMode
 from squeeze.exceptions import APIError, CommandError, ConnectionError, ParseError
 
 # Track information dictionary
-TrackDict = dict[str, Any]
+TrackDict: TypeAlias = dict[str, Any]
 
 
 # TypedDict for player status
@@ -166,13 +166,15 @@ class SqueezeJsonClient:
                     if "error" in result:
                         error_info = result["error"]
                         match error_info:
-                            case dict():
-                                code = error_info.get("code", 0)
-                                message = error_info.get("message", "Unknown error")
+                            # For Python 3.11+, we could use structural pattern matching with attribute patterns
+                            # but for better mypy compatibility, we'll use the traditional approach
+                            case dict() as error_dict:
+                                code = error_dict.get("code", 0)
+                                message = error_dict.get("message", "Unknown error")
                                 # Don't retry application-level errors
                                 raise APIError(f"Server error: {message}", code)
-                            case str():
-                                raise APIError(f"Server error: {error_info}")
+                            case str() as error_str:
+                                raise APIError(f"Server error: {error_str}")
                             case _:
                                 raise APIError(f"Server error: {error_info}")
 

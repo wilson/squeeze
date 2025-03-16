@@ -6,7 +6,7 @@ Exception classes for Squeeze.
 class SqueezeError(Exception):
     """Base class for Squeeze errors."""
 
-    def __init__(self, message: str, code: int = 0):
+    def __init__(self, message: str, code: int = 0) -> None:
         self.message = message
         self.code = code
         super().__init__(message)
