@@ -61,6 +61,11 @@ def create_parser() -> argparse.ArgumentParser:
         "--server",
         help="SqueezeBox server URL (defaults to value in ~/.squeezerc)",
     )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable colored output",
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
@@ -97,11 +102,6 @@ def create_parser() -> argparse.ArgumentParser:
         "--live",
         action="store_true",
         help="Live mode - continuously display player status with updates",
-    )
-    status_parser.add_argument(
-        "--no-color",
-        action="store_true",
-        help="Disable colored output",
     )
 
     # Search command
@@ -456,6 +456,7 @@ def main(args: list[str] | None = None) -> int:
 
     # Common arguments for all commands
     server = args_dict.get("server")
+    no_color = args_dict.get("no_color", False)
 
     # Player command common arguments
     player_id = args_dict.get("player_id")
@@ -465,7 +466,6 @@ def main(args: list[str] | None = None) -> int:
     # Create the appropriate dataclass based on the command and dispatch
     if parsed_args.command == "status":
         live = args_dict.get("live", False)
-        no_color = args_dict.get("no_color", False)
         status_args = StatusCommandArgs(
             server=server,
             player_id=player_id,
