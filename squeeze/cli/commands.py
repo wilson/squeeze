@@ -389,211 +389,287 @@ def get_keypress(timeout: float = 0.1) -> str | None:
 
 
 def display_live_status(client: ClientType, player_id: str) -> None:
-    """Display continuously updating status in live mode.
+    """Display continuously updating status in live mode with Rich UI.
 
     Args:
         client: Squeeze client instance
         player_id: ID of the player to get status for
     """
-    import os
     import sys
     import time
-    from datetime import datetime
-
-    # Terminal settings variables
-    old_settings = None
-    is_raw_mode = False
-
-    # Check if keyboard control is available
-    keyboard_available = is_keystroke_module_available()
-
-    # Setup terminal for raw input mode if available
-    if keyboard_available and sys.platform != "win32":
-        try:
-            import termios
-            import tty
-
-            # Save original terminal settings
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            # Switch to raw mode (no line buffering, no echo)
-            tty.setraw(fd)
-            is_raw_mode = True
-        except (ImportError, AttributeError, termios.error):
-            # If we can't set raw mode, fall back to normal mode
-            keyboard_available = False
-
-    # Show instructions
-    if keyboard_available:
-        print("Live status mode. Use arrow keys to control playback:")
-        print("  ← → : Previous/Next track")
-        print("  ↑ ↓ : Volume Up/Down")
-        print("  q   : Quit")
-    else:
-        print("Live status mode. Press Ctrl+C to exit.")
-    print()
 
     try:
-        # Make sure stdin is in non-blocking mode on UNIX systems
-        if is_raw_mode:
-            import fcntl
+        from rich.console import Console
+        from rich.layout import Layout
+        from rich.live import Live
+        from rich.panel import Panel
+        from rich.progress import BarColumn, Progress, TextColumn
+        from rich.table import Table
+        from rich.text import Text
+    except ImportError:
+        print("Rich library not found. Installing required package...")
+        import subprocess
+        import sys
 
-            flags = fcntl.fcntl(sys.stdin.fileno(), fcntl.F_GETFL)
-            fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "rich"])
+        from rich.console import Console
+        from rich.layout import Layout
+        from rich.live import Live
+        from rich.panel import Panel
+        from rich.progress import BarColumn, Progress, TextColumn
+        from rich.table import Table
+        from rich.text import Text
 
-        # Main loop for live status
-        while True:
-            try:
-                # Use subscribe mode to get updates
-                status = client.get_player_status(player_id, subscribe=True)
+    # Create a console instance
+    console = Console()
 
-                # Clear the screen using a direct and reliable method
-                import os
+    # Helper function to create a layout based on player status
+    def create_layout(status: PlayerStatus) -> Layout:
+        layout = Layout()
 
-                # Use the clear command on Unix-like systems
-                if sys.platform == "win32":
-                    os.system("cls")  # Windows
-                else:
-                    os.system("clear")  # Unix/Linux/MacOS
+        layout.split(Layout(name="header", size=3), Layout(name="main"))
 
-                # Also reset cursor position just to be sure
-                print("\033[H", end="")
+        layout["main"].split_row(
+            Layout(name="player_info"), Layout(name="track_info", ratio=2)
+        )
 
-                # Print timestamp and instructions
-                if keyboard_available:
-                    print(
-                        f"Status as of {datetime.now().strftime('%H:%M:%S')} "
-                        f"(←→: Prev/Next, ↑↓: Volume, q: Quit)"
+        # Create header with instructions
+        header_text = Text.from_markup(
+            "[bold]Squeeze Live Status[/bold]\n"
+            "[dim]←→: Previous/Next track • ↑↓: Volume Up/Down • q: Quit[/dim]"
+        )
+        layout["header"].update(Panel(header_text))
+
+        # Player info panel
+        player_table = Table.grid(padding=0)
+        player_table.add_column(style="bold blue")
+        player_table.add_column()
+
+        # Add player status info
+        player_table.add_row(
+            "Player:", f"{status['player_name']} ({status['player_id']})"
+        )
+        player_table.add_row("Power:", str(status["power"]))
+        player_table.add_row("Status:", status["status"])
+
+        if status["volume"] is not None:
+            player_table.add_row("Volume:", f"{status['volume']}%")
+
+        if "shuffle_mode" in status:
+            player_table.add_row("Shuffle:", status["shuffle_mode"])
+
+        if "repeat_mode" in status:
+            player_table.add_row("Repeat:", status["repeat_mode"])
+
+        # Add playlist info if available
+        if "playlist_count" in status and status["playlist_count"] > 0:
+            position = status.get("playlist_position", 0) + 1  # Convert to 1-based
+            count = status["playlist_count"]
+            player_table.add_row("Playlist:", f"{position} of {count}")
+
+        layout["player_info"].update(Panel(player_table, title="Player Info"))
+
+        # Current track panel
+        current_track = status["current_track"]
+        if current_track and isinstance(current_track, dict):
+            track_table = Table.grid(padding=0, expand=True)
+            track_table.add_column(style="bold green")
+            track_table.add_column()
+
+            # Add track info
+            if "title" in current_track:
+                track_table.add_row("Title:", current_track["title"])
+            if "artist" in current_track:
+                track_table.add_row("Artist:", current_track["artist"])
+            if "album" in current_track:
+                track_table.add_row("Album:", current_track["album"])
+
+            # Add time info
+            if "position" in current_track and "duration" in current_track:
+                position_str = format_time(current_track["position"])
+                duration_str = format_time(current_track["duration"])
+                track_table.add_row("Time:", f"{position_str} / {duration_str}")
+
+                # Add progress bar
+                try:
+                    position_secs = float(current_track["position"])
+                    duration_secs = float(current_track["duration"])
+
+                    progress = Progress(
+                        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                        BarColumn(),
+                        TextColumn("{task.completed}/{task.total}"),
+                        expand=True,
                     )
-                else:
-                    print(
-                        f"Status as of {datetime.now().strftime('%H:%M:%S')} (Ctrl+C to exit)"
+                    progress.add_task(
+                        "", total=int(duration_secs), completed=int(position_secs)
                     )
-                print()
+                    track_table.add_row("Progress:", progress)
+                except (ValueError, TypeError, ZeroDivisionError):
+                    pass
 
-                # Print the status information with all fields
-                print_player_status(status, show_all_track_fields=True)
+            # Add any additional fields
+            for key, value in current_track.items():
+                if key not in (
+                    "title",
+                    "artist",
+                    "album",
+                    "position",
+                    "duration",
+                    "artwork",
+                ):
+                    track_table.add_row(f"{key.capitalize()}:", str(value))
 
-                # Check for keypresses if keyboard control is available
-                if keyboard_available:
-                    # Get keypress (non-blocking)
-                    key = get_keypress(0.2)
-                    if key:
-                        # Handle key press with appropriate action
-                        try:
-                            # Process key immediately without using a function definition
-                            if key == "left":
-                                # If early in the track, go to the previous track, otherwise restart
-                                position = extract_track_position(status)
-                                if position <= 5:  # 5 second threshold for prev track
-                                    # Direct command execution with retry
-                                    def send_prev_command(
-                                        client_obj: ClientType, pid: str
-                                    ) -> None:
-                                        client_obj.send_command(
-                                            pid, "playlist", ["index", "-1"]
-                                        )
+            layout["track_info"].update(Panel(track_table, title="Current Track"))
+        else:
+            layout["track_info"].update(
+                Panel("No track playing", title="Current Track")
+            )
 
-                                    with_retry(
-                                        send_prev_command,
-                                        client,
-                                        player_id,
-                                        max_tries=2,
-                                        retry_delay=0.1,
-                                    )
-                                else:
-                                    # Restart track already uses with_retry internally
-                                    restart_track(client, player_id)
-                            elif key == "right":
-                                # Next track command
-                                def send_next_command(
-                                    client_obj: ClientType, pid: str
-                                ) -> None:
-                                    client_obj.send_command(
-                                        pid, "playlist", ["index", "+1"]
-                                    )
+        return layout
 
-                                with_retry(
-                                    send_next_command,
-                                    client,
-                                    player_id,
-                                    max_tries=2,
-                                    retry_delay=0.1,
-                                )
-                            elif key == "up":
-                                # Get current volume and increase by 5
-                                current_vol = int(status.get("volume", 0))
-                                new_vol = min(100, current_vol + 5)
+    # Display initial message
+    console.print("[bold]Starting Live Status mode...[/bold]")
+    console.print("Loading player information...")
 
-                                # Volume up command
-                                def send_volume_up_command(
-                                    client_obj: ClientType, pid: str, vol: int
-                                ) -> None:
-                                    client_obj.send_command(
-                                        pid, "mixer", ["volume", str(vol)]
-                                    )
+    try:
+        # Main live update loop
+        with Live(refresh_per_second=4, console=console) as live:
+            while True:
+                try:
+                    # Get player status
+                    status = client.get_player_status(player_id, subscribe=True)
 
-                                with_retry(
-                                    send_volume_up_command,
-                                    client,
-                                    player_id,
-                                    new_vol,
-                                    max_tries=2,
-                                    retry_delay=0.1,
-                                )
-                            elif key == "down":
-                                # Get current volume and decrease by 5
-                                current_vol = int(status.get("volume", 0))
-                                new_vol = max(0, current_vol - 5)
+                    # Update the live display
+                    live.update(create_layout(status))
 
-                                # Volume down command
-                                def send_volume_down_command(
-                                    client_obj: ClientType, pid: str, vol: int
-                                ) -> None:
-                                    client_obj.send_command(
-                                        pid, "mixer", ["volume", str(vol)]
-                                    )
-
-                                with_retry(
-                                    send_volume_down_command,
-                                    client,
-                                    player_id,
-                                    new_vol,
-                                    max_tries=2,
-                                    retry_delay=0.1,
-                                )
-                            elif key == "q":
-                                raise KeyboardInterrupt
-                            # Add a small delay after key press to prevent duplicate processing
-                            import time
-
-                            time.sleep(0.1)
-                        except Exception as e:
-                            print(f"Key command error: {e}", file=sys.stderr)
-                else:
-                    # Without keyboard control, wait briefly between updates
+                    # Process keyboard input using a simpler approach compatible with Rich
+                    import select
+                    import sys
                     import time
 
-                    time.sleep(0.1)
+                    # Simple keyboard input handling that works cross-platform
+                    try:
+                        # Set up non-blocking input
+                        if sys.platform == "win32":
+                            import msvcrt
 
-            except (ConnectionError, APIError, ParseError, CommandError) as e:
-                print(f"Error in live mode: {e}", file=sys.stderr)
-                # In live mode, just print the error and continue
-                import time
+                            if msvcrt.kbhit():
+                                key = msvcrt.getch()
+                                if key == b"q":
+                                    break
+                                elif key == b"\xe0":  # Special key prefix (arrows)
+                                    arrow = msvcrt.getch()
+                                    if arrow == b"K":  # Left arrow
+                                        # Previous/restart track
+                                        position = extract_track_position(status)
+                                        if position <= 5:
+                                            client.send_command(
+                                                player_id, "playlist", ["index", "-1"]
+                                            )
+                                        else:
+                                            restart_track(client, player_id)
+                                    elif arrow == b"M":  # Right arrow
+                                        client.send_command(
+                                            player_id, "playlist", ["index", "+1"]
+                                        )
+                                    elif arrow == b"H":  # Up arrow
+                                        current_vol = int(status.get("volume", 0))
+                                        new_vol = min(100, current_vol + 5)
+                                        client.send_command(
+                                            player_id, "mixer", ["volume", str(new_vol)]
+                                        )
+                                    elif arrow == b"P":  # Down arrow
+                                        current_vol = int(status.get("volume", 0))
+                                        new_vol = max(0, current_vol - 5)
+                                        client.send_command(
+                                            player_id, "mixer", ["volume", str(new_vol)]
+                                        )
+                        else:
+                            # Unix/Linux/MacOS systems using termios
+                            import termios
+                            import tty
 
-                time.sleep(5)  # Wait a bit before retrying
+                            # Check if there's input ready
+                            if select.select([sys.stdin], [], [], 0.1)[0]:
+                                # Temporarily set stdin to raw mode to read a single character
+                                old_settings = termios.tcgetattr(sys.stdin.fileno())
+                                try:
+                                    tty.setraw(sys.stdin.fileno())
+                                    key = sys.stdin.read(1)
+
+                                    if key == "q":
+                                        break
+                                    elif (
+                                        key == "\x1b"
+                                    ):  # Escape sequence for special keys
+                                        # Read the rest of the sequence
+                                        if sys.stdin.read(1) == "[":  # CSI sequence
+                                            code = sys.stdin.read(1)
+                                            if code == "D":  # Left arrow
+                                                position = extract_track_position(
+                                                    status
+                                                )
+                                                if position <= 5:
+                                                    client.send_command(
+                                                        player_id,
+                                                        "playlist",
+                                                        ["index", "-1"],
+                                                    )
+                                                else:
+                                                    restart_track(client, player_id)
+                                            elif code == "C":  # Right arrow
+                                                client.send_command(
+                                                    player_id,
+                                                    "playlist",
+                                                    ["index", "+1"],
+                                                )
+                                            elif code == "A":  # Up arrow
+                                                current_vol = int(
+                                                    status.get("volume", 0)
+                                                )
+                                                new_vol = min(100, current_vol + 5)
+                                                client.send_command(
+                                                    player_id,
+                                                    "mixer",
+                                                    ["volume", str(new_vol)],
+                                                )
+                                            elif code == "B":  # Down arrow
+                                                current_vol = int(
+                                                    status.get("volume", 0)
+                                                )
+                                                new_vol = max(0, current_vol - 5)
+                                                client.send_command(
+                                                    player_id,
+                                                    "mixer",
+                                                    ["volume", str(new_vol)],
+                                                )
+                                finally:
+                                    # Restore terminal settings
+                                    termios.tcsetattr(
+                                        sys.stdin.fileno(),
+                                        termios.TCSADRAIN,
+                                        old_settings,
+                                    )
+                    except Exception:
+                        # If there's an error with keyboard handling, just log and continue
+                        pass
+
+                    # Short sleep to prevent high CPU usage
+                    time.sleep(0.05)
+
+                except (ConnectionError, APIError, ParseError, CommandError) as e:
+                    # Show error in the live view
+                    error_text = Text(
+                        f"Error: {e}\nRetrying in 5 seconds...", style="bold red"
+                    )
+                    live.update(Panel(error_text, title="Connection Error"))
+                    time.sleep(5)  # Wait before retrying
 
     except KeyboardInterrupt:
-        print("\nExiting live mode.")
-    finally:
-        # Restore terminal settings if we changed them
-        if is_raw_mode and old_settings is not None:
-            import termios
+        pass
 
-            # Return the terminal to its original settings
-            fd = sys.stdin.fileno()
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            print("\nTerminal settings restored.")
+    console.print("[bold]Exiting live status mode.[/bold]")
 
 
 def status_command(args: StatusCommandArgs) -> None:
@@ -848,6 +924,11 @@ def display_search_results(
         items: List of items to display
         formatter: Function to format each item for display
     """
+    if not items:
+        print("  No matches found")
+        print()
+        return
+
     max_display = 10
     for item in items[:max_display]:
         print(f"  {formatter(item)}")
@@ -879,9 +960,23 @@ def search_command(args: SearchCommandArgs) -> None:
     search_type = args.type if args.type else "all"
 
     # Define formatters for each result type
+    # Define a helper function to extract artist from album
+    def format_album(album: dict[str, Any]) -> str:
+        # Extract artist from favorites_url if available
+        artist = "Unknown"
+        favorites_url = album.get("favorites_url", "")
+        if favorites_url and "contributor.name=" in favorites_url:
+            artist_part = favorites_url.split("contributor.name=")[-1]
+            artist = artist_part.split("&")[0] if "&" in artist_part else artist_part
+            # URL decode the artist name
+            import urllib.parse
+
+            artist = urllib.parse.unquote(artist)
+        return f"{album.get('album')} by {artist}"
+
     formatters = {
         "artists": lambda artist: f"{artist.get('artist')}",
-        "albums": lambda album: f"{album.get('album')} by {album.get('artist', 'Unknown')}",
+        "albums": format_album,
         "tracks": lambda track: f"{track.get('title')} by {track.get('artist', 'Unknown')} on {track.get('album', 'Unknown')}",
     }
 

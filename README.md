@@ -82,6 +82,7 @@ If no player ID is provided, the command will display an interactive selection m
 You can control the interactive behavior:
 - `--interactive`: Force interactive mode (default when player ID is not provided)
 - `--no-interactive`: Disable interactive mode (will just list players if no ID provided)
+- `--live`: Show continuously updated live status with keyboard controls
 
 ```bash
 # Force interactive selection
@@ -89,7 +90,27 @@ squeeze status --interactive
 
 # Just list players without interactive selection
 squeeze status --no-interactive
+
+# Live status mode with real-time updates and keyboard controls
+squeeze status --live
 ```
+
+#### Live Status Mode
+
+The `--live` flag activates an enhanced display mode with:
+- Real-time status updates
+- Rich, formatted terminal UI
+- Keyboard controls for common playback functions
+
+| Key           | Action                         |
+|---------------|--------------------------------|
+| ←  (Left)     | Previous track or restart track|
+| →  (Right)    | Next track                     |
+| ↑  (Up)       | Volume up (5%)                 |
+| ↓  (Down)     | Volume down (5%)               |
+| q             | Quit live mode                 |
+
+**Note**: Left arrow will restart the current track if more than 5 seconds have elapsed, otherwise it will go to the previous track.
 
 ### Player Control
 

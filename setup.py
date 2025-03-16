@@ -27,6 +27,7 @@ setup(
     },
     install_requires=[
         "tomli-w>=1.0.0",
+        "rich>=13.0.0",
         # For Python 3.11+, we use the built-in tomllib module instead of tomli
         # curses is part of the standard library for most Python installations
     ],

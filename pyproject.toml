@@ -32,6 +32,11 @@ warn_unreachable = true
 # tomli and tomli_w both include py.typed files and don't need overrides
 # All code including tests uses the same strict type checking
 
+# Allow importing rich libraries without needing type stubs
+[[tool.mypy.overrides]]
+module = "rich.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 testpaths = ["tests"]
