@@ -340,9 +340,20 @@ class SqueezeJsonClient:
             if "power" in result:
                 status["power"] = PowerState.from_int(result.get("power", 0))
 
-            # Volume
+            # Volume - ensure it's properly converted to an integer
             if "volume" in result:
-                status["volume"] = result.get("volume", 0)
+                try:
+                    # WiiM players may report volume in a different format or range
+                    # Make sure we always get a number between 0-100
+                    vol_value = result.get("volume", 0)
+                    # First convert to integer or float if needed
+                    if isinstance(vol_value, str):
+                        vol_value = float(vol_value)
+                    # Then ensure it's in the 0-100 range
+                    status["volume"] = max(0, min(100, int(vol_value)))
+                except (ValueError, TypeError):
+                    # Fallback to default if conversion fails
+                    status["volume"] = 0
 
             # Current mode
             mode = result.get("mode", PlayerMode.STOP)

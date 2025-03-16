@@ -373,9 +373,10 @@ def format_player_status(
     if play_status in ["playing", "Now Playing"] and power == "off":
         power = "on"
 
-    # Handle volume display for external volume control players
-    if (volume == "0" or volume == 0) and play_status in ["playing", "Now Playing"]:
-        volume_display = "external control"
+    # When the server reports a volume of 0 but the player is playing,
+    # it may be a WiiM or another device with external volume control
+    if (volume == 0 or volume == "0") and play_status in ["playing", "Now Playing"]:
+        volume_display = "external control"  # WiiM likely has its own volume control
     else:
         volume_display = f"{volume}%"
 
@@ -784,17 +785,34 @@ def display_live_status(
         for line in status_lines:
             print(line)
 
-        # Add keyboard controls info
+        # Add keyboard controls info - modify based on volume state
         print("")
+
+        # Determine key controls based on volume
+        volume_val = status.get("volume", 0)
+        has_volume_control = volume_val != 0
+
         if use_color:
-            # Colorize the keyboard controls with more subtle colors
+            # Use different controls based on volume capability
+            if has_volume_control:
+                # Normal volume controls
+                vol_controls = f"{BOLD}+/↑{RESET} (vol+) {BOLD}-/↓{RESET} (vol-)"
+            else:
+                # For devices with 0 volume (likely external control)
+                vol_controls = f"{BOLD}v{RESET} (try vol reset)"
+
+            # Display all controls
             print(
-                f"{BOLD}KEYS:{RESET} {BOLD}p/←{RESET} (prev) {BOLD}n/→{RESET} (next) {BOLD}+/↑{RESET} (vol+) {BOLD}-/↓{RESET} (vol-) {BOLD}s{RESET} (restart) {BOLD}q{RESET} (quit)"
+                f"{BOLD}KEYS:{RESET} {BOLD}p/←{RESET} (prev) {BOLD}n/→{RESET} (next) {vol_controls} {BOLD}s{RESET} (restart) {BOLD}q{RESET} (quit)"
             )
         else:
-            print(
-                "KEYS: p/← (prev) n/→ (next) +/↑ (vol+) -/↓ (vol-) s (restart) q (quit)"
-            )
+            # Plain text controls based on volume capability
+            if has_volume_control:
+                vol_controls = "+/↑ (vol+) -/↓ (vol-)"
+            else:
+                vol_controls = "v (try vol reset)"
+
+            print(f"KEYS: p/← (prev) n/→ (next) {vol_controls} s (restart) q (quit)")
         print("")
 
     # Setup for keyboard input
@@ -839,10 +857,10 @@ def display_live_status(
                 current_track = status.get("current_track", {})
                 try:
                     position = float(current_track.get("position", 0))
-                    volume = status.get("volume", "0")
+                    # We don't need volume value for absolute adjustments since we're
+                    # using relative volume adjustments for WiiM compatibility
                 except (ValueError, TypeError):
                     position = 0
-                    volume = "0"
 
                 # Handle keyboard input
                 key_pressed = False
@@ -886,28 +904,48 @@ def display_live_status(
                                 display_simple_status(status, use_color=use_color)
 
                             elif arrow == b"H":  # Up
-                                try:
-                                    vol_int = int(volume)
-                                    new_vol = min(100, vol_int + 5)
-                                    client.send_command(
-                                        player_id, "mixer", ["volume", str(new_vol)]
-                                    )
-                                except (ValueError, TypeError):
+                                # Only allow volume up if the player reports non-zero volume
+                                volume_val = status.get("volume", 0)
+                                if volume_val != 0:
+                                    # Use relative volume adjustment
                                     client.send_command(
                                         player_id, "mixer", ["volume", "+5"]
                                     )
+                                    # Small delay to allow volume to change
+                                    time.sleep(0.2)
+                                    # Force immediate refresh to show new volume
+                                    status = client.get_player_status(player_id)
+                                    display_simple_status(status, use_color=use_color)
 
                             elif arrow == b"P":  # Down
-                                try:
-                                    vol_int = int(volume)
-                                    new_vol = max(0, vol_int - 5)
-                                    client.send_command(
-                                        player_id, "mixer", ["volume", str(new_vol)]
-                                    )
-                                except (ValueError, TypeError):
+                                # Only allow volume down if the player reports non-zero volume
+                                volume_val = status.get("volume", 0)
+                                if volume_val != 0:
+                                    # Use relative volume adjustment
                                     client.send_command(
                                         player_id, "mixer", ["volume", "-5"]
                                     )
+                                    # Small delay to allow volume to change
+                                    time.sleep(0.2)
+                                    # Force immediate refresh to show new volume
+                                    status = client.get_player_status(player_id)
+                                    display_simple_status(status, use_color=use_color)
+
+                            # Handle 'v' key for volume reset for WiiM devices
+                            elif key == b"v" or key == b"V":  # Volume reset to 100%
+                                volume_val = status.get("volume", 0)
+                                if (
+                                    volume_val == 0
+                                ):  # Only for devices with volume issues
+                                    # Try to set volume to 100%
+                                    client.send_command(
+                                        player_id, "mixer", ["volume", "100"]
+                                    )
+                                    # Allow time for volume change to take effect
+                                    time.sleep(0.5)
+                                    # Force immediate refresh
+                                    status = client.get_player_status(player_id)
+                                    display_simple_status(status, use_color=use_color)
 
                 # Unix-like keyboard handling - use the get_keypress function for more reliable detection
                 try:
@@ -938,15 +976,45 @@ def display_live_status(
                         key_pressed = True
 
                     elif key == "+" or key == "up":  # Volume up
-                        client.send_command(player_id, "mixer", ["volume", "+5"])
+                        # Only allow volume up if the player reports non-zero volume
+                        volume_val = status.get("volume", 0)
+                        if volume_val != 0:
+                            # Use relative volume adjustment
+                            client.send_command(player_id, "mixer", ["volume", "+5"])
+                            # Small delay to allow volume to change
+                            time.sleep(0.2)
+                            # Force immediate refresh to show new volume
+                            status = client.get_player_status(player_id)
+                            display_simple_status(status, use_color=use_color)
                         key_pressed = True
 
                     elif key == "-" or key == "down":  # Volume down
-                        client.send_command(player_id, "mixer", ["volume", "-5"])
+                        # Only allow volume down if the player reports non-zero volume
+                        volume_val = status.get("volume", 0)
+                        if volume_val != 0:
+                            # Use relative volume adjustment
+                            client.send_command(player_id, "mixer", ["volume", "-5"])
+                            # Small delay to allow volume to change
+                            time.sleep(0.2)
+                            # Force immediate refresh to show new volume
+                            status = client.get_player_status(player_id)
+                            display_simple_status(status, use_color=use_color)
                         key_pressed = True
 
                     elif key == "s":  # Restart track
                         client.send_command(player_id, "time", ["0"])
+                        key_pressed = True
+
+                    elif key == "v":  # Volume reset to 100% for external volume devices
+                        volume_val = status.get("volume", 0)
+                        if volume_val == 0:  # Only for devices with volume issues
+                            # Try to set volume to 100%
+                            client.send_command(player_id, "mixer", ["volume", "100"])
+                            # Allow time for volume change to take effect
+                            time.sleep(0.5)
+                            # Force immediate refresh
+                            status = client.get_player_status(player_id)
+                            display_simple_status(status, use_color=use_color)
                         key_pressed = True
                 except Exception:
                     # Ignore keyboard input errors
