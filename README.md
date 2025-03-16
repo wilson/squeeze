@@ -202,7 +202,9 @@ squeeze server
 
 ## Development
 
-This project requires Python 3.11 or higher.
+This project requires Python 3.11 or higher and has the following dependencies:
+- tomli-w: For TOML file handling
+- rich: For enhanced terminal UI in live status mode
 
 ### Platform-Specific Notes
 

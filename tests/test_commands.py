@@ -262,7 +262,5 @@ def test_status_command_live_mode(mock_json_client: MagicMock, player_id: str) -
             # Run the command, should exit on KeyboardInterrupt
             status_command(args)
 
-            # Verify subscribe was used
-            mock_json_client.get_player_status.assert_called_with(
-                player_id, subscribe=True
-            )
+            # Verify get_player_status was called (without subscribe parameter)
+            mock_json_client.get_player_status.assert_called_with(player_id)

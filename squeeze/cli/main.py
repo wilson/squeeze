@@ -518,7 +518,7 @@ def main(args: list[str] | None = None) -> int:
         config_command(config_args)
     elif parsed_args.command == "search":
         term = args_dict.get("term", "")
-        search_type = args_dict.get("type")
+        search_type = args_dict.get("type", "all")
         search_args = SearchCommandArgs(server=server, term=term, type=search_type)
         search_command(search_args)
     elif parsed_args.command == "server":
