@@ -322,6 +322,133 @@ def display_progress_bar(
         pass
 
 
+def format_player_status(
+    status: PlayerStatus, show_all_track_fields: bool = False
+) -> list[str]:
+    """Format player status into a list of strings.
+
+    Args:
+        status: Player status dictionary
+        show_all_track_fields: Whether to display all track fields or only priority ones
+
+    Returns:
+        List of formatted strings representing the player status
+    """
+    # Initialize the result list
+    lines = []
+
+    # Extract basic player information
+    player_name = status.get("player_name", "Unknown")
+    player_id_str = status.get("player_id", "")
+    power = "on" if str(status.get("power", "0")) == "1" else "off"
+    play_status = status.get("status", "Unknown")
+    volume = status.get("volume", "?")
+
+    # Fix power display - if it's playing music, it must be on regardless of what API says
+    if play_status in ["playing", "Now Playing"] and power == "off":
+        power = "on"
+
+    # Handle volume display for external volume control players
+    if (volume == "0" or volume == 0) and play_status in ["playing", "Now Playing"]:
+        volume_display = "external control"
+    else:
+        volume_display = f"{volume}%"
+
+    # Add basic player information
+    lines.append(f"PLAYER:   {player_name}")
+    lines.append(f"ID:       {player_id_str}")
+    lines.append(f"POWER:    {power}")
+    lines.append(f"STATUS:   {play_status}")
+    lines.append(f"VOLUME:   {volume_display}")
+
+    # Print shuffle and repeat if available
+    if "shuffle_mode" in status:
+        lines.append(f"SHUFFLE:  {status['shuffle_mode']}")
+    if "repeat_mode" in status:
+        lines.append(f"REPEAT:   {status['repeat_mode']}")
+
+    # Print playlist info if available
+    if "playlist_count" in status and status["playlist_count"] > 0:
+        playlist_pos = status.get("playlist_position", 0) + 1
+        playlist_count = status.get("playlist_count", 0)
+        lines.append(f"PLAYLIST: {playlist_pos} of {playlist_count}")
+
+    # Add separator for current track
+    lines.append("")
+    lines.append("------ CURRENT TRACK ------")
+    lines.append("")
+
+    # Display current track information
+    current_track = status.get("current_track", {})
+    if current_track and isinstance(current_track, dict):
+        # Priority fields to display in order
+        priority_fields = [
+            "title",
+            "artist",
+            "album",
+            "position",
+            "duration",
+        ]
+
+        # Process each priority field
+        for field in priority_fields:
+            if field in current_track:
+                # Format position and duration as time if needed
+                if field == "position" or field == "duration":
+                    try:
+                        value = format_time_simple(float(current_track[field]))
+                    except (ValueError, TypeError):
+                        value = "0:00"
+                else:
+                    value = current_track[field]
+                lines.append(f"{field.upper()}:    {value}")
+
+        # Add progress bar if position and duration are available
+        try:
+            position = float(current_track.get("position", 0))
+            duration = float(current_track.get("duration", 0))
+
+            if duration > 0:
+                lines.append(
+                    f"TIME:     {format_time_simple(position)} / {format_time_simple(duration)}"
+                )
+
+                # Simple progress bar
+                percent = min(100, int((position / duration) * 100))
+                bar_width = 30
+                filled_width = int(bar_width * percent / 100)
+                bar = f"[{'#' * filled_width}{'-' * (bar_width - filled_width)}] {percent}%"
+                lines.append(f"PROGRESS: {bar}")
+        except (ValueError, TypeError):
+            pass
+
+        # Then add any remaining fields if requested
+        if show_all_track_fields:
+            lines.append("")
+            lines.append("Additional track information:")
+            for key, value in current_track.items():
+                if key not in priority_fields and key != "artwork":
+                    lines.append(f"  {key.capitalize()}: {value}")
+
+    return lines
+
+
+def format_time_simple(seconds: float) -> str:
+    """Format a time value in seconds to a string format.
+
+    Args:
+        seconds: Time in seconds
+
+    Returns:
+        Formatted time string (HH:MM:SS or MM:SS)
+    """
+    mins, secs = divmod(int(seconds), 60)
+    hours, mins = divmod(mins, 60)
+    if hours > 0:
+        return f"{hours}:{mins:02d}:{secs:02d}"
+    return f"{mins}:{secs:02d}"
+
+
 def print_player_status(
     status: PlayerStatus, show_all_track_fields: bool = False
 ) -> None:
@@ -331,60 +458,14 @@ def print_player_status(
         status: Player status dictionary
         show_all_track_fields: Whether to display all track fields or only priority ones
     """
-    # Basic player information
-    print(f"Player: {status['player_name']} ({status['player_id']})")
-    print(f"Power: {status['power']}")
-    print(f"Status: {status['status']}")
-    if status["volume"] is not None:
-        print(f"Volume: {status['volume']}")
+    # Get formatted status as a list of strings
+    status_lines = format_player_status(status, show_all_track_fields)
 
-    # Print shuffle and repeat if available
-    if "shuffle_mode" in status:
-        print(f"Shuffle: {status['shuffle_mode']}")
-    if "repeat_mode" in status:
-        print(f"Repeat: {status['repeat_mode']}")
-
-    # Print playlist info if available
-    if "playlist_count" in status and status["playlist_count"] > 0:
-        position = (
-            status.get("playlist_position", 0) + 1
-        )  # Convert to 1-based for display
-        count = status["playlist_count"]
-        print(f"Playlist: {position} of {count}")
-
-    # Display current track information
-    current_track = status["current_track"]
-    if current_track and isinstance(current_track, dict):
-        print("\nCurrent track:")
-        # Priority order for fields
-        priority_fields = [
-            "title",
-            "artist",
-            "album",
-            "position",
-            "duration",
-            "artwork",
-        ]
-
-        # First print priority fields in order
-        for field in priority_fields:
-            if field in current_track:
-                # Format position and duration as time if needed
-                if field == "position" or field == "duration":
-                    value = format_time(current_track[field])
-                else:
-                    value = current_track[field]
-                print(f"  {field.capitalize()}: {value}")
-
-        # Show progress bar if position and duration are available
-        if "position" in current_track and "duration" in current_track:
-            display_progress_bar(current_track["position"], current_track["duration"])
-
-        # Then print any remaining fields if requested
-        if show_all_track_fields:
-            for key, value in current_track.items():
-                if key not in priority_fields:
-                    print(f"  {key.capitalize()}: {value}")
+    # Print the formatted status
+    print("====== SQUEEZE STATUS ======")
+    print("")
+    for line in status_lines:
+        print(line)
 
 
 def is_keystroke_module_available() -> bool:
@@ -556,13 +637,7 @@ def display_live_status(client: ClientType, player_id: str) -> None:
     fd = None
     is_raw_mode = False
 
-    # Format time helper function
-    def format_time_simple(seconds: float) -> str:
-        mins, secs = divmod(int(seconds), 60)
-        hours, mins = divmod(mins, 60)
-        if hours > 0:
-            return f"{hours}:{mins:02d}:{secs:02d}"
-        return f"{mins}:{secs:02d}"
+    # We now use the global format_time_simple function
 
     # Helper to clear the screen in a cross-platform way
     def clear_screen() -> None:
@@ -577,83 +652,20 @@ def display_live_status(client: ClientType, player_id: str) -> None:
         # Clear screen
         clear_screen()
 
-        # Extract important info
-        player_name = status.get("player_name", "Unknown")
-        player_id_str = status.get("player_id", "")
-        power = "on" if str(status.get("power", "0")) == "1" else "off"
-        play_status = status.get("status", "Unknown")
-        volume = status.get("volume", "?")
-
-        # Fix power display - if it's playing music, it must be on regardless of what API says
-        if play_status in ["playing", "Now Playing"] and power == "off":
-            power = "on"
-
-        # Handle volume display for external volume control players
-        if (volume == "0" or volume == 0) and play_status in ["playing", "Now Playing"]:
-            volume_display = "external control"
-        else:
-            volume_display = f"{volume}%"
-
-        # Current track info
-        current_track = status.get("current_track", {})
-        title = current_track.get("title", "")
-        artist = current_track.get("artist", "")
-        album = current_track.get("album", "")
-
-        try:
-            position = float(current_track.get("position", 0))
-            duration = float(current_track.get("duration", 0))
-            pos_str = format_time_simple(position)
-            dur_str = format_time_simple(duration)
-        except (ValueError, TypeError):
-            position = 0
-            duration = 0
-            pos_str = "0:00"
-            dur_str = "0:00"
-
-        # Playlist info
-        playlist_pos = status.get("playlist_position", 0) + 1
-        playlist_count = status.get("playlist_count", 0)
+        # Get formatted status lines
+        status_lines = format_player_status(status, show_all_track_fields=False)
 
         # Print header
         print("====== SQUEEZE STATUS ====== (q=quit)")
         print("")
-        print(f"PLAYER:   {player_name}")
-        print(f"ID:       {player_id_str}")
-        print(f"POWER:    {power}")
-        print(f"STATUS:   {play_status}")
-        print(f"VOLUME:   {volume_display}")
 
-        if playlist_count > 0:
-            print(f"PLAYLIST: {playlist_pos} of {playlist_count}")
+        # Print the formatted status lines
+        for line in status_lines:
+            print(line)
 
-        # Keys help
+        # Add keyboard controls info
         print("")
         print("KEYS: p/← (prev) n/→ (next) +/↑ (vol+) -/↓ (vol-) s (restart) q (quit)")
-
-        # Current track
-        print("")
-        print("------ CURRENT TRACK ------")
-        print("")
-
-        if title:
-            print(f"TITLE:    {title}")
-        if artist:
-            print(f"ARTIST:   {artist}")
-        if album:
-            print(f"ALBUM:    {album}")
-
-        if duration > 0:
-            print(f"TIME:     {pos_str} / {dur_str}")
-
-            # Simple progress bar
-            percent = min(100, int((position / duration) * 100))
-            bar_width = 30
-            filled_width = int(bar_width * percent / 100)
-            bar = f"[{'#' * filled_width}{'-' * (bar_width - filled_width)}] {percent}%"
-            print(f"PROGRESS: {bar}")
-
-        # Spacer at the end
         print("")
 
     # Setup for keyboard input
