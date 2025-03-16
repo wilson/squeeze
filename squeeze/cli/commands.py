@@ -324,17 +324,20 @@ def display_progress_bar(
 
 
 # Define ANSI color codes - safe for most terminals including MacOS Terminal
+# Using more subdued colors for a professional look
 RESET = "\033[0m"
 BOLD = "\033[1m"
+DIM = "\033[2m"  # Dimmed text, more subtle
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
 BLUE = "\033[34m"
 MAGENTA = "\033[35m"
 CYAN = "\033[36m"
 RED = "\033[31m"
-BRIGHT_GREEN = "\033[92m"
-BRIGHT_YELLOW = "\033[93m"
-BRIGHT_BLUE = "\033[94m"
+# Avoid the bright colors as they can be garish
+LIGHT_GREEN = "\033[92m"  # Renamed for clarity about usage
+LIGHT_YELLOW = "\033[93m"  # Renamed for clarity about usage
+LIGHT_BLUE = "\033[94m"  # Renamed for clarity about usage
 
 
 def format_player_status(
@@ -376,8 +379,8 @@ def format_player_status(
     else:
         volume_display = f"{volume}%"
 
-    # Format values with colors based on their status
-    player_name_display = colorize(player_name, BOLD + CYAN)
+    # Format values with colors based on their status - using more subtle colors
+    player_name_display = colorize(player_name, BOLD)  # Just bold, no color
 
     if power == "on":
         power_display = colorize(power, GREEN)
@@ -385,7 +388,9 @@ def format_player_status(
         power_display = colorize(power, RED)
 
     if play_status.lower() == "playing" or play_status == "Now Playing":
-        status_display = colorize(play_status, BRIGHT_GREEN)
+        status_display = colorize(
+            play_status, GREEN
+        )  # Regular green instead of bright green
     elif play_status.lower() == "paused":
         status_display = colorize(play_status, YELLOW)
     elif play_status.lower() == "stopped":
@@ -405,37 +410,41 @@ def format_player_status(
     lines.append(f"{id_label} {player_id_str}")
     lines.append(f"{power_label} {power_display}")
     lines.append(f"{status_label} {status_display}")
-    lines.append(f"{volume_label} {colorize(volume_display, CYAN)}")
+    lines.append(f"{volume_label} {colorize(volume_display, DIM)}")
 
-    # Print shuffle and repeat if available
+    # Print shuffle and repeat if available - with more subtle coloring
     if "shuffle_mode" in status:
         shuffle_value = status["shuffle_mode"]
-        shuffle_display = colorize(
-            shuffle_value, CYAN if shuffle_value != "off" else RESET
-        )
+        # Only colorize if it's enabled (not "off")
+        if shuffle_value != "off":
+            shuffle_display = colorize(shuffle_value, DIM + GREEN)
+        else:
+            shuffle_display = colorize(shuffle_value, DIM)
         shuffle_label = colorize("SHUFFLE:".ljust(10), BOLD)
         lines.append(f"{shuffle_label} {shuffle_display}")
 
     if "repeat_mode" in status:
         repeat_value = status["repeat_mode"]
-        repeat_display = colorize(
-            repeat_value, CYAN if repeat_value != "off" else RESET
-        )
+        # Only colorize if it's enabled (not "off")
+        if repeat_value != "off":
+            repeat_display = colorize(repeat_value, DIM + GREEN)
+        else:
+            repeat_display = colorize(repeat_value, DIM)
         repeat_label = colorize("REPEAT:".ljust(10), BOLD)
         lines.append(f"{repeat_label} {repeat_display}")
 
-    # Print playlist info if available
+    # Print playlist info if available - more subtle coloring
     if "playlist_count" in status and status["playlist_count"] > 0:
         playlist_pos = status.get("playlist_position", 0) + 1
         playlist_count = status.get("playlist_count", 0)
-        position_display = colorize(str(playlist_pos), YELLOW)
-        count_display = colorize(str(playlist_count), CYAN)
+        position_display = colorize(str(playlist_pos), BOLD)  # Just bold the position
+        count_display = colorize(str(playlist_count), DIM)  # Dim the total count
         playlist_label = colorize("PLAYLIST:".ljust(10), BOLD)
         lines.append(f"{playlist_label} {position_display} of {count_display}")
 
     # Add separator for current track
     lines.append("")
-    lines.append(colorize("------ CURRENT TRACK ------", BOLD + BLUE))
+    lines.append(colorize("------ CURRENT TRACK ------", BOLD))
     lines.append("")
 
     # Display current track information
@@ -462,15 +471,23 @@ def format_player_status(
                 else:
                     value = current_track[field]
 
-                # Apply color based on field type
+                # Apply color based on field type - more subtle now
                 if field == "title":
-                    value_display = colorize(value, BOLD + BRIGHT_YELLOW)
+                    value_display = colorize(
+                        value, BOLD + YELLOW
+                    )  # Bold yellow instead of bright yellow
                 elif field == "artist":
-                    value_display = colorize(value, BRIGHT_GREEN)
+                    value_display = colorize(
+                        value, GREEN
+                    )  # Standard green instead of bright green
                 elif field == "album":
-                    value_display = colorize(value, BRIGHT_BLUE)
+                    value_display = colorize(
+                        value, BLUE
+                    )  # Standard blue instead of bright blue
                 else:
-                    value_display = colorize(value, CYAN)
+                    value_display = colorize(
+                        value, DIM + CYAN
+                    )  # Dimmed cyan for less important fields
 
                 # Create field label with consistent width (10 chars)
                 field_label = colorize(f"{field.upper()}:".ljust(10), BOLD)
@@ -482,8 +499,13 @@ def format_player_status(
             duration = float(current_track.get("duration", 0))
 
             if duration > 0:
-                pos_display = colorize(format_time_simple(position), CYAN)
-                dur_display = colorize(format_time_simple(duration), CYAN)
+                # Use subtle formatting for time display
+                pos_display = colorize(
+                    format_time_simple(position), BOLD
+                )  # Bold for current position
+                dur_display = colorize(
+                    format_time_simple(duration), DIM
+                )  # Dim for total duration
                 # Use consistent padding for TIME field
                 time_label = colorize("TIME:".ljust(10), BOLD)
                 lines.append(f"{time_label} {pos_display} / {dur_display}")
@@ -494,7 +516,8 @@ def format_player_status(
                 filled_width = int(bar_width * percent / 100)
 
                 if use_color:
-                    bar = f"[{GREEN}{'█' * filled_width}{RESET}{BLUE}{'▒' * (bar_width - filled_width)}{RESET}] {YELLOW}{percent}%{RESET}"
+                    # More subtle progress bar: green fill, dimmed unfilled portion, normal percentage
+                    bar = f"[{GREEN}{'█' * filled_width}{RESET}{DIM}{'▒' * (bar_width - filled_width)}{RESET}] {percent}%"
                 else:
                     bar = f"[{'#' * filled_width}{'-' * (bar_width - filled_width)}] {percent}%"
 
@@ -544,9 +567,9 @@ def print_player_status(
     # Get formatted status as a list of strings
     status_lines = format_player_status(status, show_all_track_fields, use_color)
 
-    # Print the formatted status with color if enabled
+    # Print the formatted status with color if enabled - more subtle header
     header = (
-        f"{BOLD}{BLUE}====== SQUEEZE STATUS ======{RESET}"
+        f"{BOLD}====== SQUEEZE STATUS ======{RESET}"  # Just bold, no color
         if use_color
         else "====== SQUEEZE STATUS ======"
     )
@@ -748,9 +771,9 @@ def display_live_status(
             status, show_all_track_fields=False, use_color=use_color
         )
 
-        # Print header with color if enabled
+        # Print header with color if enabled - more subtle header
         header = (
-            f"{BOLD}{BLUE}====== SQUEEZE STATUS ====== (q=quit){RESET}"
+            f"{BOLD}====== SQUEEZE STATUS ====== (q=quit){RESET}"  # Just bold, no color
             if use_color
             else "====== SQUEEZE STATUS ====== (q=quit)"
         )
@@ -764,9 +787,9 @@ def display_live_status(
         # Add keyboard controls info
         print("")
         if use_color:
-            # Colorize the keyboard controls for better visibility
+            # Colorize the keyboard controls with more subtle colors
             print(
-                f"{BOLD}KEYS:{RESET} {YELLOW}p/←{RESET} (prev) {CYAN}n/→{RESET} (next) {GREEN}+/↑{RESET} (vol+) {RED}-/↓{RESET} (vol-) {MAGENTA}s{RESET} (restart) {BOLD}q{RESET} (quit)"
+                f"{BOLD}KEYS:{RESET} {BOLD}p/←{RESET} (prev) {BOLD}n/→{RESET} (next) {BOLD}+/↑{RESET} (vol+) {BOLD}-/↓{RESET} (vol-) {BOLD}s{RESET} (restart) {BOLD}q{RESET} (quit)"
             )
         else:
             print(
