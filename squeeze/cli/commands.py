@@ -264,24 +264,42 @@ def is_keystroke_module_available() -> bool:
     Returns:
         True if keystroke detection modules are available, False otherwise
     """
-    try:
-        import sys
+    import importlib.util
+    import os
+    import sys
 
-        if sys.platform == "darwin" or sys.platform.startswith("linux"):
-            import termios  # noqa
-            import tty  # noqa
-
-            return True
-        else:
-            import msvcrt  # noqa
-
-            return True
-    except ImportError:
+    # Check if we're in an interactive terminal
+    if not os.isatty(sys.stdin.fileno()):
         return False
+
+    # Store platform for cleaner code
+    platform = sys.platform
+
+    # For macOS and Linux
+    if platform == "darwin" or platform.startswith("linux"):
+        # Check for termios and tty modules
+        has_termios = importlib.util.find_spec("termios") is not None
+        has_tty = importlib.util.find_spec("tty") is not None
+        return has_termios and has_tty
+
+    # For Windows
+    if platform == "win32":
+        # Check for msvcrt module
+        has_msvcrt = importlib.util.find_spec("msvcrt") is not None
+        return has_msvcrt
+
+    # Any other platform is not supported
+    return False
+
+
+# Track when keys were last pressed to avoid duplicates
+_last_key_press_time: dict[str, float] = {}
 
 
 def get_keypress(timeout: float = 0.1) -> str | None:
     """Get a keypress without blocking, with timeout.
+
+    This implementation is simpler and more reliable across different terminals.
 
     Args:
         timeout: How long to wait for a keypress in seconds
@@ -289,59 +307,85 @@ def get_keypress(timeout: float = 0.1) -> str | None:
     Returns:
         Key identifier string (e.g., "up", "down", "left", "right", "q") or None if no key pressed
     """
+    import os
+    import select
     import sys
+    import time
 
-    if sys.platform == "darwin" or sys.platform.startswith("linux"):
-        import select
-        import termios
-        import tty
+    # First check if we can read from stdin within our timeout
+    try:
+        # Only try to read if stdin has data available
+        rlist, _, _ = select.select([sys.stdin], [], [], timeout)
+        if not rlist:
+            return None  # No input available
 
-        fd = sys.stdin.fileno()
-        old = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            if select.select([sys.stdin], [], [], timeout)[0]:
-                c = sys.stdin.read(1)
-                # Handle escape sequences for arrow keys
-                if c == "\x1b":
-                    if select.select([sys.stdin], [], [], timeout)[0]:
-                        c2 = sys.stdin.read(1)
-                        if c2 == "[":
-                            if select.select([sys.stdin], [], [], timeout)[0]:
-                                c3 = sys.stdin.read(1)
-                                if c3 == "A":
-                                    return "up"
-                                if c3 == "B":
-                                    return "down"
-                                if c3 == "C":
-                                    return "right"
-                                if c3 == "D":
-                                    return "left"
-                elif c in ("q", "Q"):
-                    return "q"
-                return None
-            return None
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
-    else:
-        import msvcrt
+        # Current time for debounce checking
+        current_time = time.time()
 
-        if msvcrt.kbhit():
-            c = msvcrt.getch()
-            if c == b"\xe0":
-                c2 = msvcrt.getch()
-                if c2 == b"H":
-                    return "up"
-                if c2 == b"P":
-                    return "down"
-                if c2 == b"M":
-                    return "right"
-                if c2 == b"K":
-                    return "left"
-            elif c in (b"q", b"Q"):
-                return "q"
-            return None
-        return None
+        # Minimum time between keypresses to consider them distinct
+        debounce_time = 0.3  # 300ms default
+
+        # Read a single character
+        char = os.read(sys.stdin.fileno(), 1)
+
+        # Process standard arrow key sequences (ESC [ A/B/C/D)
+        if char == b"\x1b":  # ESC character
+            # Check if more input is immediately available
+            if select.select([sys.stdin], [], [], 0.02)[0]:  # Short timeout
+                next_char = os.read(sys.stdin.fileno(), 1)
+
+                if next_char == b"[" and select.select([sys.stdin], [], [], 0.02)[0]:
+                    arrow_char = os.read(sys.stdin.fileno(), 1)
+
+                    # Up arrow
+                    if arrow_char == b"A":
+                        last_time = _last_key_press_time.get("up", 0)
+                        if (
+                            current_time - last_time > 0.15
+                        ):  # Shorter debounce for volume
+                            _last_key_press_time["up"] = current_time
+                            return "up"
+
+                    # Down arrow
+                    elif arrow_char == b"B":
+                        last_time = _last_key_press_time.get("down", 0)
+                        if (
+                            current_time - last_time > 0.15
+                        ):  # Shorter debounce for volume
+                            _last_key_press_time["down"] = current_time
+                            return "down"
+
+                    # Right arrow
+                    elif arrow_char == b"C":
+                        last_time = _last_key_press_time.get("right", 0)
+                        if current_time - last_time > debounce_time:
+                            _last_key_press_time["right"] = current_time
+                            return "right"
+
+                    # Left arrow - most important, so give it special treatment
+                    elif arrow_char == b"D":
+                        last_time = _last_key_press_time.get("left", 0)
+                        if current_time - last_time > debounce_time:
+                            _last_key_press_time["left"] = current_time
+                            # Clear any remaining input to avoid double triggering
+                            while select.select([sys.stdin], [], [], 0.01)[0]:
+                                os.read(sys.stdin.fileno(), 1)  # Discard
+                            return "left"
+
+        # Quit command is a simple 'q' key
+        elif char in (b"q", b"Q"):
+            return "q"
+
+        # Other keys - clear any remaining input
+        while select.select([sys.stdin], [], [], 0.01)[0]:
+            os.read(sys.stdin.fileno(), 1)  # Discard any remaining input
+
+    except Exception:
+        # If anything goes wrong with keyboard handling, just continue
+        # This is robust against terminal issues
+        pass
+
+    return None
 
 
 def display_live_status(client: ClientType, player_id: str) -> None:
@@ -351,8 +395,35 @@ def display_live_status(client: ClientType, player_id: str) -> None:
         client: Squeeze client instance
         player_id: ID of the player to get status for
     """
+    import os
+    import sys
+    import time
+    from datetime import datetime
+
+    # Terminal settings variables
+    old_settings = None
+    is_raw_mode = False
+
     # Check if keyboard control is available
     keyboard_available = is_keystroke_module_available()
+
+    # Setup terminal for raw input mode if available
+    if keyboard_available and sys.platform != "win32":
+        try:
+            import termios
+            import tty
+
+            # Save original terminal settings
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            # Switch to raw mode (no line buffering, no echo)
+            tty.setraw(fd)
+            is_raw_mode = True
+        except (ImportError, AttributeError, termios.error):
+            # If we can't set raw mode, fall back to normal mode
+            keyboard_available = False
+
+    # Show instructions
     if keyboard_available:
         print("Live status mode. Use arrow keys to control playback:")
         print("  ← → : Previous/Next track")
@@ -363,18 +434,32 @@ def display_live_status(client: ClientType, player_id: str) -> None:
     print()
 
     try:
+        # Make sure stdin is in non-blocking mode on UNIX systems
+        if is_raw_mode:
+            import fcntl
+
+            flags = fcntl.fcntl(sys.stdin.fileno(), fcntl.F_GETFL)
+            fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+        # Main loop for live status
         while True:
             try:
                 # Use subscribe mode to get updates
                 status = client.get_player_status(player_id, subscribe=True)
 
-                # Clear the screen for a cleaner display
-                # We can't use os.system('clear') because it's not portable
-                print("\033[H\033[J", end="")  # ANSI escape code to clear screen
+                # Clear the screen using a direct and reliable method
+                import os
+
+                # Use the clear command on Unix-like systems
+                if sys.platform == "win32":
+                    os.system("cls")  # Windows
+                else:
+                    os.system("clear")  # Unix/Linux/MacOS
+
+                # Also reset cursor position just to be sure
+                print("\033[H", end="")
 
                 # Print timestamp and instructions
-                from datetime import datetime
-
                 if keyboard_available:
                     print(
                         f"Status as of {datetime.now().strftime('%H:%M:%S')} "
@@ -386,41 +471,105 @@ def display_live_status(client: ClientType, player_id: str) -> None:
                     )
                 print()
 
-                # Print the status information
-                print_player_status(status)
+                # Print the status information with all fields
+                print_player_status(status, show_all_track_fields=True)
 
                 # Check for keypresses if keyboard control is available
                 if keyboard_available:
-                    # Get keypress with short timeout
-                    key = get_keypress(0.1)
+                    # Get keypress (non-blocking)
+                    key = get_keypress(0.2)
                     if key:
-                        if key == "left":
-                            # If early in the track, go to the previous track, otherwise restart
-                            position = extract_track_position(status)
-                            if position <= 5:  # 5 second threshold for prev track
-                                client.send_command(
-                                    player_id, "playlist", ["index", "-1"]
+                        # Handle key press with appropriate action
+                        try:
+                            # Process key immediately without using a function definition
+                            if key == "left":
+                                # If early in the track, go to the previous track, otherwise restart
+                                position = extract_track_position(status)
+                                if position <= 5:  # 5 second threshold for prev track
+                                    # Direct command execution with retry
+                                    def send_prev_command(
+                                        client_obj: ClientType, pid: str
+                                    ) -> None:
+                                        client_obj.send_command(
+                                            pid, "playlist", ["index", "-1"]
+                                        )
+
+                                    with_retry(
+                                        send_prev_command,
+                                        client,
+                                        player_id,
+                                        max_tries=2,
+                                        retry_delay=0.1,
+                                    )
+                                else:
+                                    # Restart track already uses with_retry internally
+                                    restart_track(client, player_id)
+                            elif key == "right":
+                                # Next track command
+                                def send_next_command(
+                                    client_obj: ClientType, pid: str
+                                ) -> None:
+                                    client_obj.send_command(
+                                        pid, "playlist", ["index", "+1"]
+                                    )
+
+                                with_retry(
+                                    send_next_command,
+                                    client,
+                                    player_id,
+                                    max_tries=2,
+                                    retry_delay=0.1,
                                 )
-                            else:
-                                restart_track(client, player_id)
-                        elif key == "right":
-                            client.send_command(player_id, "playlist", ["index", "+1"])
-                        elif key == "up":
-                            # Get current volume and increase by 5
-                            current_vol = int(status.get("volume", 0))
-                            new_vol = min(100, current_vol + 5)
-                            client.send_command(
-                                player_id, "mixer", ["volume", str(new_vol)]
-                            )
-                        elif key == "down":
-                            # Get current volume and decrease by 5
-                            current_vol = int(status.get("volume", 0))
-                            new_vol = max(0, current_vol - 5)
-                            client.send_command(
-                                player_id, "mixer", ["volume", str(new_vol)]
-                            )
-                        elif key == "q":
-                            raise KeyboardInterrupt
+                            elif key == "up":
+                                # Get current volume and increase by 5
+                                current_vol = int(status.get("volume", 0))
+                                new_vol = min(100, current_vol + 5)
+
+                                # Volume up command
+                                def send_volume_up_command(
+                                    client_obj: ClientType, pid: str, vol: int
+                                ) -> None:
+                                    client_obj.send_command(
+                                        pid, "mixer", ["volume", str(vol)]
+                                    )
+
+                                with_retry(
+                                    send_volume_up_command,
+                                    client,
+                                    player_id,
+                                    new_vol,
+                                    max_tries=2,
+                                    retry_delay=0.1,
+                                )
+                            elif key == "down":
+                                # Get current volume and decrease by 5
+                                current_vol = int(status.get("volume", 0))
+                                new_vol = max(0, current_vol - 5)
+
+                                # Volume down command
+                                def send_volume_down_command(
+                                    client_obj: ClientType, pid: str, vol: int
+                                ) -> None:
+                                    client_obj.send_command(
+                                        pid, "mixer", ["volume", str(vol)]
+                                    )
+
+                                with_retry(
+                                    send_volume_down_command,
+                                    client,
+                                    player_id,
+                                    new_vol,
+                                    max_tries=2,
+                                    retry_delay=0.1,
+                                )
+                            elif key == "q":
+                                raise KeyboardInterrupt
+                            # Add a small delay after key press to prevent duplicate processing
+                            import time
+
+                            time.sleep(0.1)
+                        except Exception as e:
+                            print(f"Key command error: {e}", file=sys.stderr)
                 else:
                     # Without keyboard control, wait briefly between updates
                     import time
@@ -436,6 +585,15 @@ def display_live_status(client: ClientType, player_id: str) -> None:
 
     except KeyboardInterrupt:
         print("\nExiting live mode.")
+    finally:
+        # Restore terminal settings if we changed them
+        if is_raw_mode and old_settings is not None:
+            import termios
+
+            # Return the terminal to its original settings
+            fd = sys.stdin.fileno()
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            print("\nTerminal settings restored.")
 
 
 def status_command(args: StatusCommandArgs) -> None:
