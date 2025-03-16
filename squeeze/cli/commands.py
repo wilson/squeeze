@@ -451,9 +451,6 @@ def get_keypress(timeout: float = 0.1) -> str | None:
         # Current time for debounce checking
         current_time = time.time()
 
-        # Minimum time between keypresses to consider them distinct
-        debounce_time = 0.3  # 300ms default
-
         # Read a single character
         char = os.read(sys.stdin.fileno(), 1)
 
@@ -466,35 +463,31 @@ def get_keypress(timeout: float = 0.1) -> str | None:
                 if next_char == b"[" and select.select([sys.stdin], [], [], 0.02)[0]:
                     arrow_char = os.read(sys.stdin.fileno(), 1)
 
-                    # Up arrow
+                    # Up arrow - use very minimal debounce for immediate response
                     if arrow_char == b"A":
                         last_time = _last_key_press_time.get("up", 0)
-                        if (
-                            current_time - last_time > 0.15
-                        ):  # Shorter debounce for volume
+                        if current_time - last_time > 0.05:  # 50ms debounce
                             _last_key_press_time["up"] = current_time
                             return "up"
 
                     # Down arrow
                     elif arrow_char == b"B":
                         last_time = _last_key_press_time.get("down", 0)
-                        if (
-                            current_time - last_time > 0.15
-                        ):  # Shorter debounce for volume
+                        if current_time - last_time > 0.05:  # 50ms debounce
                             _last_key_press_time["down"] = current_time
                             return "down"
 
                     # Right arrow
                     elif arrow_char == b"C":
                         last_time = _last_key_press_time.get("right", 0)
-                        if current_time - last_time > debounce_time:
+                        if current_time - last_time > 0.05:  # 50ms debounce
                             _last_key_press_time["right"] = current_time
                             return "right"
 
                     # Left arrow - most important, so give it special treatment
                     elif arrow_char == b"D":
                         last_time = _last_key_press_time.get("left", 0)
-                        if current_time - last_time > debounce_time:
+                        if current_time - last_time > 0.05:  # 50ms debounce
                             _last_key_press_time["left"] = current_time
                             # Clear any remaining input to avoid double triggering
                             while select.select([sys.stdin], [], [], 0.01)[0]:
@@ -504,6 +497,26 @@ def get_keypress(timeout: float = 0.1) -> str | None:
         # Quit command is a simple 'q' key
         elif char in (b"q", b"Q"):
             return "q"
+
+        # Letter keys for navigation - no debounce needed for most
+        elif char == b"p":  # Previous track
+            return "p"
+        elif char == b"n":  # Next track
+            return "n"
+        elif char == b"s":  # Restart track
+            return "s"
+
+        # Volume controls - light debounce
+        elif char == b"+":  # Volume up
+            last_time = _last_key_press_time.get("vol_up", 0)
+            if current_time - last_time > 0.1:  # 100ms debounce
+                _last_key_press_time["vol_up"] = current_time
+                return "+"
+        elif char == b"-":  # Volume down
+            last_time = _last_key_press_time.get("vol_down", 0)
+            if current_time - last_time > 0.1:  # 100ms debounce
+                _last_key_press_time["vol_down"] = current_time
+                return "-"
 
         # Other keys - clear any remaining input
         while select.select([sys.stdin], [], [], 0.01)[0]:
@@ -518,15 +531,15 @@ def get_keypress(timeout: float = 0.1) -> str | None:
 
 
 def display_live_status(client: ClientType, player_id: str) -> None:
-    """Display continuously updating status with simple terminal formatting.
+    """Display continuously updating status with terminal formatting.
 
     Provides a structured terminal UI that works reliably across different terminal types.
+    Uses simple text-based display for maximum compatibility.
 
     Args:
         client: Squeeze client instance
         player_id: ID of the player to get status for
     """
-    # Use simple terminal UI approach instead of Rich to avoid blocking IO issues
     import os
     import select
     import sys
@@ -558,29 +571,94 @@ def display_live_status(client: ClientType, player_id: str) -> None:
         else:
             os.system("clear")
 
-    # Get terminal width safely
-    def get_term_width() -> int:
+    # Display status information in a simple format
+    def display_simple_status(status: PlayerStatus) -> None:
+        """Display status with simple text formatting."""
+        # Clear screen
+        clear_screen()
+
+        # Extract important info
+        player_name = status.get("player_name", "Unknown")
+        player_id_str = status.get("player_id", "")
+        power = "on" if str(status.get("power", "0")) == "1" else "off"
+        play_status = status.get("status", "Unknown")
+        volume = status.get("volume", "?")
+
+        # Fix power display - if it's playing music, it must be on regardless of what API says
+        if play_status in ["playing", "Now Playing"] and power == "off":
+            power = "on"
+
+        # Handle volume display for external volume control players
+        if (volume == "0" or volume == 0) and play_status in ["playing", "Now Playing"]:
+            volume_display = "external control"
+        else:
+            volume_display = f"{volume}%"
+
+        # Current track info
+        current_track = status.get("current_track", {})
+        title = current_track.get("title", "")
+        artist = current_track.get("artist", "")
+        album = current_track.get("album", "")
+
         try:
-            return os.get_terminal_size().columns
-        except (OSError, AttributeError):
-            return 80
+            position = float(current_track.get("position", 0))
+            duration = float(current_track.get("duration", 0))
+            pos_str = format_time_simple(position)
+            dur_str = format_time_simple(duration)
+        except (ValueError, TypeError):
+            position = 0
+            duration = 0
+            pos_str = "0:00"
+            dur_str = "0:00"
 
-    # Create a simple progress bar
-    def make_progress_bar(position: float, duration: float, width: int = 40) -> str:
-        if duration <= 0:
-            return "[" + "-" * width + "] 0%"
-        percent = min(100, int((position / duration) * 100))
-        bar_filled = int(width * percent / 100)
-        return f"[{'█' * bar_filled}{'-' * (width - bar_filled)}] {percent}%"
+        # Playlist info
+        playlist_pos = status.get("playlist_position", 0) + 1
+        playlist_count = status.get("playlist_count", 0)
 
-    # Setup raw mode for keyboard input with more robust approach
+        # Print header
+        print("====== SQUEEZE STATUS ====== (q=quit)")
+        print("")
+        print(f"PLAYER:   {player_name}")
+        print(f"ID:       {player_id_str}")
+        print(f"POWER:    {power}")
+        print(f"STATUS:   {play_status}")
+        print(f"VOLUME:   {volume_display}")
+
+        if playlist_count > 0:
+            print(f"PLAYLIST: {playlist_pos} of {playlist_count}")
+
+        # Keys help
+        print("")
+        print("KEYS: p/← (prev) n/→ (next) +/↑ (vol+) -/↓ (vol-) s (restart) q (quit)")
+
+        # Current track
+        print("")
+        print("------ CURRENT TRACK ------")
+        print("")
+
+        if title:
+            print(f"TITLE:    {title}")
+        if artist:
+            print(f"ARTIST:   {artist}")
+        if album:
+            print(f"ALBUM:    {album}")
+
+        if duration > 0:
+            print(f"TIME:     {pos_str} / {dur_str}")
+
+            # Simple progress bar
+            percent = min(100, int((position / duration) * 100))
+            bar_width = 30
+            filled_width = int(bar_width * percent / 100)
+            bar = f"[{'#' * filled_width}{'-' * (bar_width - filled_width)}] {percent}%"
+            print(f"PROGRESS: {bar}")
+
+        # Spacer at the end
+        print("")
+
+    # Setup for keyboard input
     print("Starting Live Status mode...")
     print("Loading player information...")
-
-    # Use a much simpler keyboard input approach that works more reliably
-    is_raw_mode = False
-    fd = None
-    old_settings = None
 
     # On macOS and Linux, we'll set up cbreak mode (not raw mode)
     if sys.platform != "win32" and sys.stdin.isatty():
@@ -606,157 +684,26 @@ def display_live_status(client: ClientType, player_id: str) -> None:
             print(f"Keyboard setup error: {e}")
             is_raw_mode = False
 
-    # Show simplified message so we don't clutter with info that will be on-screen anyway
-    print("\nStarting live status mode...")
-    print("Loading keyboard support...")
-    time.sleep(1)
-
+    # Main display loop
     try:
-        # Main display loop
-        last_key_time = 0.0
-        key_debounce = 0.25  # 250ms debounce for keypresses
-
         while True:
             try:
                 # Get player status
                 status = client.get_player_status(player_id)
 
-                # Extract data from status
-                player_name = status.get("player_name", "Unknown")
-                player_id_str = status.get("player_id", "")
-                power = "on" if str(status.get("power", "0")) == "1" else "off"
-                play_status = status.get("status", "Unknown")
-                volume = status.get("volume", "?")
+                # Use the simple display function
+                display_simple_status(status)
 
-                # Current track info
+                # Extract data for key handling
                 current_track = status.get("current_track", {})
-                title = current_track.get("title", "")
-                artist = current_track.get("artist", "")
-                album = current_track.get("album", "")
-
                 try:
                     position = float(current_track.get("position", 0))
-                    duration = float(current_track.get("duration", 0))
+                    volume = status.get("volume", "0")
                 except (ValueError, TypeError):
                     position = 0
-                    duration = 0
+                    volume = "0"
 
-                # Playlist info
-                playlist_pos = status.get("playlist_position", 0) + 1
-                playlist_count = status.get("playlist_count", 0)
-
-                # Skip clearing the screen to avoid flicker and buffer issues
-
-                # Fix power display - if it's playing music, it must be on regardless of what API says
-                if play_status in ["playing", "Now Playing"] and power == "off":
-                    power = "on"
-
-                # Handle volume display for external volume control players
-                # Some third-party players use external volume control
-                # and always report 0 volume even when playing
-
-                # Simple logic: if volume is 0 but device is playing,
-                # it must be using external volume control
-                if (volume == "0" or volume == 0) and play_status in [
-                    "playing",
-                    "Now Playing",
-                ]:
-                    volume_display = "external control"
-                else:
-                    volume_display = f"{volume}%"
-
-                # Create an ultra-simple display with minimal formatting
-                lines = [
-                    "====== SQUEEZE STATUS ====== (q=quit)",
-                    "",
-                    f"PLAYER:   {player_name}",
-                    f"ID:       {player_id_str}",
-                    f"POWER:    {power}",
-                    f"STATUS:   {play_status}",
-                    f"VOLUME:   {volume_display}",
-                ]
-
-                # Add info about playlist position
-                if playlist_count > 0:
-                    lines.append(f"PLAYLIST: {playlist_pos} of {playlist_count}")
-
-                # Add key help before the current track
-                lines.extend(
-                    [
-                        "",
-                        "KEYS: p/← (prev) n/→ (next) +/↑ (vol+) -/↓ (vol-) s (restart) q (quit)",
-                        "",
-                        "------ CURRENT TRACK ------",
-                        "",
-                    ]
-                )
-
-                if title:
-                    lines.append(f"TITLE:    {title}")
-                if artist:
-                    lines.append(f"ARTIST:   {artist}")
-                if album:
-                    lines.append(f"ALBUM:    {album}")
-
-                if duration > 0:
-                    pos_str = format_time_simple(position)
-                    dur_str = format_time_simple(duration)
-                    lines.append(f"TIME:     {pos_str} / {dur_str}")
-
-                    # Simpler progress bar
-                    percent = min(100, int((position / duration) * 100))
-                    bar_width = 30
-                    filled_width = int(bar_width * percent / 100)
-                    bar = f"[{'#' * filled_width}{'-' * (bar_width - filled_width)}] {percent}%"
-                    lines.append(f"PROGRESS: {bar}")
-
-                # Add a blank line at the end for spacing
-                lines.append("")
-
-                # Ultimate fallback: write directly to the terminal
-                # using simple ANSI control sequences
-                try:
-                    # Start fresh - clear the screen
-                    sys.stdout.write(
-                        "\033[2J\033[H"
-                    )  # Clear screen and move cursor to home
-
-                    # Write each line manually with explicit cursor control
-                    row = 1
-                    for line in lines:
-                        sys.stdout.write(
-                            f"\033[{row};1H"
-                        )  # Position cursor at start of line
-                        sys.stdout.write(
-                            f"{line}\033[K"
-                        )  # Write line and clear to end of line
-                        row += 1
-
-                    # Force the buffer to flush
-                    sys.stdout.flush()
-                except Exception:
-                    # Ultimate fallback - use system calls
-                    try:
-                        # Clear screen using system command
-                        if sys.platform == "win32":
-                            os.system("cls")
-                        else:
-                            os.system("clear")
-
-                        # Most basic display possible - no formatting
-                        simple_output = "\n".join(lines)
-
-                        if sys.platform == "win32":
-                            for line in lines:
-                                os.system(f"echo {line}")
-                        else:
-                            # Use printf which is more reliable than echo for control chars
-                            escaped_output = simple_output.replace("'", "'\\''")
-                            os.system(f"printf '%s\\n' '{escaped_output}'")
-                    except Exception:
-                        pass
-
-                # Handle keyboard input much more responsively
+                # Handle keyboard input
                 key_pressed = False
 
                 # Windows keyboard handling
@@ -765,125 +712,116 @@ def display_live_status(client: ClientType, player_id: str) -> None:
 
                     # Check for keypress without waiting
                     if msvcrt.kbhit():
-                        current_time = time.time()
                         key = msvcrt.getch()
 
                         # Process 'q' immediately for responsiveness
                         if key == b"q":
                             break
 
-                        # For other keys, use debouncing
-                        if current_time - last_key_time > key_debounce:
-                            last_key_time = current_time
-                            key_pressed = True
+                        # For arrow keys and letter keys, respond immediately without debounce
+                        # to make the interface much more responsive
+                        key_pressed = True
 
-                            if key == b"\xe0":  # Special keys
-                                arrow = msvcrt.getch()
+                        if key == b"\xe0":  # Special keys
+                            arrow = msvcrt.getch()
 
-                                if arrow == b"K":  # Left
-                                    if position <= 5:
-                                        client.send_command(
-                                            player_id, "playlist", ["index", "-1"]
-                                        )
-                                    else:
-                                        client.send_command(player_id, "time", ["0"])
-
-                                elif arrow == b"M":  # Right
+                            if arrow == b"K":  # Left
+                                if position <= 5:
                                     client.send_command(
-                                        player_id, "playlist", ["index", "+1"]
+                                        player_id, "playlist", ["index", "-1"]
+                                    )
+                                    # Force an immediate status refresh
+                                    status = client.get_player_status(player_id)
+                                    display_simple_status(status)
+                                else:
+                                    client.send_command(player_id, "time", ["0"])
+
+                            elif arrow == b"M":  # Right
+                                client.send_command(
+                                    player_id, "playlist", ["index", "+1"]
+                                )
+                                # Force an immediate status refresh
+                                status = client.get_player_status(player_id)
+                                display_simple_status(status)
+
+                            elif arrow == b"H":  # Up
+                                try:
+                                    vol_int = int(volume)
+                                    new_vol = min(100, vol_int + 5)
+                                    client.send_command(
+                                        player_id, "mixer", ["volume", str(new_vol)]
+                                    )
+                                except (ValueError, TypeError):
+                                    client.send_command(
+                                        player_id, "mixer", ["volume", "+5"]
                                     )
 
-                                elif arrow == b"H":  # Up
-                                    try:
-                                        vol_int = int(volume)
-                                        new_vol = min(100, vol_int + 5)
-                                        client.send_command(
-                                            player_id, "mixer", ["volume", str(new_vol)]
-                                        )
-                                    except (ValueError, TypeError):
-                                        # Handle case where volume isn't a valid number
-                                        client.send_command(
-                                            player_id, "mixer", ["volume", "+5"]
-                                        )
+                            elif arrow == b"P":  # Down
+                                try:
+                                    vol_int = int(volume)
+                                    new_vol = max(0, vol_int - 5)
+                                    client.send_command(
+                                        player_id, "mixer", ["volume", str(new_vol)]
+                                    )
+                                except (ValueError, TypeError):
+                                    client.send_command(
+                                        player_id, "mixer", ["volume", "-5"]
+                                    )
 
-                                elif arrow == b"P":  # Down
-                                    try:
-                                        vol_int = int(volume)
-                                        new_vol = max(0, vol_int - 5)
-                                        client.send_command(
-                                            player_id, "mixer", ["volume", str(new_vol)]
-                                        )
-                                    except (ValueError, TypeError):
-                                        # Handle case where volume isn't a valid number
-                                        client.send_command(
-                                            player_id, "mixer", ["volume", "-5"]
-                                        )
-
-                # Implementation based on https://stackoverflow.com/questions/51013778
-                # that properly handles arrow keys on macOS
+                # Unix-like keyboard handling - use the get_keypress function for more reliable detection
                 try:
-                    # Check if input is available
-                    if select.select([sys.stdin], [], [], 0.1)[0]:
-                        # Read the first character
-                        char = sys.stdin.read(1)
+                    key = get_keypress(
+                        0.01
+                    )  # Use a very short timeout for responsive UI
 
-                        # Process 'q' immediately for responsive exit
-                        if char == "q":
-                            break
+                    if key == "q":  # Quit immediately
+                        break
 
-                        # Handle regular character keys first
-                        if char == "p":  # Previous track (alt for left arrow)
+                    elif (
+                        key == "p" or key == "left"
+                    ):  # Previous track handling - dual behavior
+                        if position <= 5:
                             client.send_command(player_id, "playlist", ["index", "-1"])
-                            key_pressed = True
-
-                        elif char == "n":  # Next track (alt for right arrow)
-                            client.send_command(player_id, "playlist", ["index", "+1"])
-                            key_pressed = True
-
-                        elif char == "+":  # Volume up (alt for up arrow)
-                            client.send_command(player_id, "mixer", ["volume", "+5"])
-                            key_pressed = True
-
-                        elif char == "-":  # Volume down (alt for down arrow)
-                            client.send_command(player_id, "mixer", ["volume", "-5"])
-                            key_pressed = True
-
-                        elif char == "s":  # Restart track
+                            # Force immediate refresh
+                            status = client.get_player_status(player_id)
+                            display_simple_status(status)
+                        else:
                             client.send_command(player_id, "time", ["0"])
-                            key_pressed = True
+                        key_pressed = True
 
-                        # Pressing Escape means just treat it as a left arrow (common terminal behavior)
-                        elif char == "\x1b":
-                            # Do a left arrow action without debug messages
-                            if position <= 5:
-                                client.send_command(
-                                    player_id, "playlist", ["index", "-1"]
-                                )
-                            else:
-                                client.send_command(player_id, "time", ["0"])
-                            key_pressed = True
+                    elif key == "n" or key == "right":  # Next track
+                        client.send_command(player_id, "playlist", ["index", "+1"])
+                        # Force immediate refresh
+                        status = client.get_player_status(player_id)
+                        display_simple_status(status)
+                        key_pressed = True
 
-                            # Clear any remaining escape sequence chars
-                            try:
-                                while select.select([sys.stdin], [], [], 0)[0]:
-                                    sys.stdin.read(1)
-                            except Exception:
-                                pass
+                    elif key == "+" or key == "up":  # Volume up
+                        client.send_command(player_id, "mixer", ["volume", "+5"])
+                        key_pressed = True
 
+                    elif key == "-" or key == "down":  # Volume down
+                        client.send_command(player_id, "mixer", ["volume", "-5"])
+                        key_pressed = True
+
+                    elif key == "s":  # Restart track
+                        client.send_command(player_id, "time", ["0"])
+                        key_pressed = True
                 except Exception:
-                    # Just ignore any errors in keyboard input
+                    # Ignore keyboard input errors
                     pass
 
                 # Adjust sleep time based on activity for better responsiveness
                 if key_pressed:
                     # Short sleep after key press to see the effect quickly
-                    time.sleep(0.1)
+                    # Allow time for the server to update its status
+                    time.sleep(0.3)
                 else:
                     # Longer sleep when idle to reduce CPU usage
                     time.sleep(0.2)
 
             except (ConnectionError, APIError, ParseError, CommandError) as e:
-                # Show error
+                # Show error and retry
                 clear_screen()
                 print(f"\nError: {e}")
                 print("Retrying in 5 seconds...")
@@ -911,21 +849,14 @@ def display_live_status(client: ClientType, player_id: str) -> None:
         # Final cleanup
         try:
             # Clear screen
-            if sys.platform == "win32":
-                os.system("cls")
-            else:
-                os.system("clear")
+            clear_screen()
 
             # Reset terminal for good measure
             if sys.stdout.isatty() and sys.platform != "win32":
                 os.system("stty sane")
 
-            # Use safer system call for final message
-            msg = "Exiting live status mode."
-            if sys.platform == "win32":
-                os.system(f"echo {msg}")
-            else:
-                os.system(f'echo "{msg}"')
+            # Final message
+            print("Exiting live status mode.")
 
         except Exception:
             # Last resort - nothing more we can do
