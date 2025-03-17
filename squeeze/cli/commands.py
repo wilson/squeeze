@@ -399,12 +399,12 @@ def format_player_status(
     else:
         status_display = colorize(play_status, RESET)
 
-    # Use consistent field width for all player information (10 chars)
-    player_label = colorize("PLAYER:".ljust(10), BOLD)
-    id_label = colorize("ID:".ljust(10), BOLD)
-    power_label = colorize("POWER:".ljust(10), BOLD)
-    status_label = colorize("STATUS:".ljust(10), BOLD)
-    volume_label = colorize("VOLUME:".ljust(10), BOLD)
+    # Create labels using helper function
+    player_label = format_field_label("PLAYER:", use_color)
+    id_label = format_field_label("ID:", use_color)
+    power_label = format_field_label("POWER:", use_color)
+    status_label = format_field_label("STATUS:", use_color)
+    volume_label = format_field_label("VOLUME:", use_color)
 
     # Add basic player information
     lines.append(f"{player_label} {player_name_display}")
@@ -421,7 +421,7 @@ def format_player_status(
             shuffle_display = colorize(shuffle_value, DIM + GREEN)
         else:
             shuffle_display = colorize(shuffle_value, DIM)
-        shuffle_label = colorize("SHUFFLE:".ljust(10), BOLD)
+        shuffle_label = format_field_label("SHUFFLE:", use_color)
         lines.append(f"{shuffle_label} {shuffle_display}")
 
     if "repeat_mode" in status:
@@ -431,7 +431,7 @@ def format_player_status(
             repeat_display = colorize(repeat_value, DIM + GREEN)
         else:
             repeat_display = colorize(repeat_value, DIM)
-        repeat_label = colorize("REPEAT:".ljust(10), BOLD)
+        repeat_label = format_field_label("REPEAT:", use_color)
         lines.append(f"{repeat_label} {repeat_display}")
 
     # Print playlist info if available - more subtle coloring
@@ -440,7 +440,7 @@ def format_player_status(
         playlist_count = status.get("playlist_count", 0)
         position_display = colorize(str(playlist_pos), BOLD)  # Just bold the position
         count_display = colorize(str(playlist_count), DIM)  # Dim the total count
-        playlist_label = colorize("PLAYLIST:".ljust(10), BOLD)
+        playlist_label = format_field_label("PLAYLIST:", use_color)
         lines.append(f"{playlist_label} {position_display} of {count_display}")
 
     # Add separator for current track
@@ -491,7 +491,7 @@ def format_player_status(
                     )  # Dimmed cyan for less important fields
 
                 # Create field label with consistent width (10 chars)
-                field_label = colorize(f"{field.upper()}:".ljust(10), BOLD)
+                field_label = format_field_label(f"{field.upper()}:", use_color)
                 lines.append(f"{field_label} {value_display}")
 
         # Add progress bar if position and duration are available
@@ -512,7 +512,7 @@ def format_player_status(
                     bar = f"[{'#' * filled_width}{'-' * (bar_width - filled_width)}] {percent}%"
 
                 # Use consistent padding for PROGRESS field
-                progress_label = colorize("PROGRESS:".ljust(10), BOLD)
+                progress_label = format_field_label("PROGRESS:", use_color)
                 lines.append(f"{progress_label} {bar}")
         except (ValueError, TypeError):
             pass
@@ -528,6 +528,21 @@ def format_player_status(
     return lines
 
 
+def format_field_label(label_text: str, use_color: bool = True, width: int = 10) -> str:
+    """Format a field label with consistent width and styling.
+
+    Args:
+        label_text: The label text
+        use_color: Whether to use ANSI colors
+        width: Width to pad the label to
+
+    Returns:
+        Formatted label string
+    """
+    padded_label = label_text.ljust(width)
+    return f"{BOLD}{padded_label}{RESET}" if use_color else padded_label
+
+
 def format_time_simple(seconds: float) -> str:
     """Format a time value in seconds to a string format.
 
@@ -537,11 +552,17 @@ def format_time_simple(seconds: float) -> str:
     Returns:
         Formatted time string (HH:MM:SS or MM:SS)
     """
-    mins, secs = divmod(int(seconds), 60)
-    hours, mins = divmod(mins, 60)
-    if hours > 0:
-        return f"{hours}:{mins:02d}:{secs:02d}"
-    return f"{mins}:{secs:02d}"
+    try:
+        # Convert to int for consistent handling
+        secs_int = int(seconds)
+        mins, secs = divmod(secs_int, 60)
+        hours, mins = divmod(mins, 60)
+        if hours > 0:
+            return f"{hours}:{mins:02d}:{secs:02d}"
+        return f"{mins}:{secs:02d}"
+    except (ValueError, TypeError):
+        # Handle invalid input
+        return "0:00"
 
 
 def print_status_header(use_color: bool = True) -> None:
@@ -1206,23 +1227,14 @@ def format_time(seconds: int | str | float) -> str:
     Returns:
         Formatted time string
     """
+    # Reuse format_time_simple for consistency
     try:
-        # Convert to int to handle various input types
+        # Convert input to float first for more flexible handling
         if isinstance(seconds, str):
-            seconds = int(float(seconds))
-        else:
-            seconds = int(seconds)
-
-        minutes, seconds = divmod(seconds, 60)
-        hours, minutes = divmod(minutes, 60)
+            return format_time_simple(float(seconds))
+        return format_time_simple(float(seconds))
     except (ValueError, TypeError):
-        # Handle invalid input
         return "0:00"
-
-    if hours > 0:
-        return f"{hours}:{minutes:02d}:{seconds:02d}"
-    else:
-        return f"{minutes}:{seconds:02d}"
 
 
 def players_command(args: PlayersCommandArgs) -> None:
@@ -1293,19 +1305,9 @@ def play_command(args: PlayerCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
-    try:
-        client.send_command(player_id, "play")
-        print(f"Play command sent to player {player_id}")
-    except Exception as e:
-        print(f"Error sending play command: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args, "play", lambda client, player_id: client.send_command(player_id, "play")
+    )
 
 
 def pause_command(args: PlayerCommandArgs) -> None:
@@ -1314,19 +1316,9 @@ def pause_command(args: PlayerCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
-    try:
-        client.send_command(player_id, "pause")
-        print(f"Pause command sent to player {player_id}")
-    except Exception as e:
-        print(f"Error sending pause command: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args, "pause", lambda client, player_id: client.send_command(player_id, "pause")
+    )
 
 
 def stop_command(args: PlayerCommandArgs) -> None:
@@ -1335,19 +1327,9 @@ def stop_command(args: PlayerCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
-    try:
-        client.send_command(player_id, "stop")
-        print(f"Stop command sent to player {player_id}")
-    except Exception as e:
-        print(f"Error sending stop command: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args, "stop", lambda client, player_id: client.send_command(player_id, "stop")
+    )
 
 
 def volume_command(args: VolumeCommandArgs) -> None:
@@ -1380,24 +1362,21 @@ def power_command(args: PowerCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
+    # Capture state before executing the command
     state = args.state
 
     # Convert to 1/0
     state_value = "1" if state == "on" else "0"
 
-    try:
-        client.send_command(player_id, "power", [state_value])
-        print(f"Power set to {state} for player {player_id}")
-    except Exception as e:
-        print(f"Error setting power: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args,
+        "power",
+        lambda client, player_id: client.send_command(
+            player_id, "power", [state_value]
+        ),
+        success_message=f"Power set to {state} for player {args.player_id or '<selected player>'}",
+        error_message="Error setting power",
+    )
 
 
 def display_search_results(
@@ -1578,19 +1557,13 @@ def next_command(args: PlayerCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
-    try:
-        client.send_command(player_id, "playlist", ["index", "+1"])
-        print(f"Next track command sent to player {player_id}")
-    except Exception as e:
-        print(f"Error sending next track command: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args,
+        "next track",
+        lambda client, player_id: client.send_command(
+            player_id, "playlist", ["index", "+1"]
+        ),
+    )
 
 
 def jump_command(args: JumpCommandArgs) -> None:
@@ -1599,22 +1572,18 @@ def jump_command(args: JumpCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client_with_error_handling(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
+    # Capture the index before executing the command
     index = args.index
 
-    try:
-        # Send the jump command - index is 0-based
-        client.send_command(player_id, "playlist", ["index", str(index)])
-        print(f"Jumped to track {index} in playlist for player {player_id}")
-    except Exception as e:
-        print(f"Error jumping to track: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args,
+        "jump",
+        lambda client, player_id: client.send_command(
+            player_id, "playlist", ["index", str(index)]
+        ),
+        success_message=f"Jumped to track {index} in playlist for player {args.player_id or '<selected player>'}",
+        error_message="Error jumping to track",
+    )
 
 
 def prev_command(args: PrevCommandArgs) -> None:
@@ -1671,6 +1640,47 @@ def prev_command(args: PrevCommandArgs) -> None:
         sys.exit(1)
 
 
+def execute_simple_command(
+    args: PlayerCommandArgs,
+    command_name: str,
+    command_fn: Callable[[ClientType, str], None],
+    success_message: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    """Execute a simple player command with standardized error handling.
+
+    Args:
+        args: Command-line arguments
+        command_name: Name of the command for error reporting
+        command_fn: Function to execute the command
+        success_message: Optional custom success message
+        error_message: Optional custom error message
+    """
+    server_url = get_server_url(args.server)
+    client = create_client_with_error_handling(server_url)
+
+    player_id = get_player_id(args, client)
+    if not player_id:
+        sys.exit(1)
+
+    try:
+        # Execute the command function
+        command_fn(client, player_id)
+
+        # Print success message
+        if success_message:
+            print(success_message)
+        else:
+            print(f"{command_name.capitalize()} command sent to player {player_id}")
+    except Exception as e:
+        # Print error message
+        if error_message:
+            print(f"{error_message}: {e}", file=sys.stderr)
+        else:
+            print(f"Error sending {command_name} command: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def now_playing_command(args: PlayerCommandArgs) -> None:
     """Show Now Playing screen on a player.
 
@@ -1680,20 +1690,13 @@ def now_playing_command(args: PlayerCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
-    try:
-        # Use the show_now_playing method
-        client.show_now_playing(player_id)
-        print(f"Now Playing screen activated for player {player_id}")
-    except Exception as e:
-        print(f"Error showing Now Playing screen: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args,
+        "now playing",
+        lambda client, player_id: client.show_now_playing(player_id),
+        success_message=f"Now Playing screen activated for player {args.player_id or '<selected player>'}",
+        error_message="Error showing Now Playing screen",
+    )
 
 
 def shuffle_command(args: ShuffleCommandArgs) -> None:
