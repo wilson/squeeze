@@ -2,8 +2,9 @@
 
 This feature enhances the `squeeze status --live` command by adding keyboard controls and a rich terminal UI:
 
-- **Left/Right arrows**: Navigate between tracks (previous/next)
-- **Up/Down arrows**: Adjust volume (up/down by 5%)
+- **Left/Right arrows or p/n keys**: Navigate between tracks (previous/next)
+- **Up/Down arrows or +/- keys**: Adjust volume (up/down by 5%)
+- **v key**: Reset volume (only for devices with external volume control)
 - **Q key**: Quit live mode
 
 ## Usage
@@ -12,13 +13,17 @@ When using `squeeze status --live`, you can control your player with keyboard sh
 
 | Key           | Action                         |
 |---------------|--------------------------------|
-| ←  (Left)     | Previous track or restart track|
-| →  (Right)    | Next track                     |
-| ↑  (Up)       | Volume up (5%)                 |
-| ↓  (Down)     | Volume down (5%)               |
+| ←  (Left) / p | Previous track or restart track|
+| →  (Right) / n| Next track                     |
+| ↑  (Up) / +   | Volume up (5%)                 |
+| ↓  (Down) / - | Volume down (5%)               |
+| v             | Reset volume (special devices) |
 | q             | Quit live mode                 |
 
-**Note**: Left arrow will restart the current track if more than 5 seconds have elapsed, otherwise it will go to the previous track.
+**Notes**:
+- Left arrow/p will restart the current track if more than 5 seconds have elapsed, otherwise it will go to the previous track.
+- Volume controls (Up/Down/+/-) will only work for devices that support server-controlled volume.
+- The 'v' key is only shown for devices that may have external volume control.
 
 ## New Features
 

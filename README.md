@@ -104,13 +104,17 @@ The `--live` flag activates an enhanced display mode with:
 
 | Key           | Action                         |
 |---------------|--------------------------------|
-| ←  (Left)     | Previous track or restart track|
-| →  (Right)    | Next track                     |
-| ↑  (Up)       | Volume up (5%)                 |
-| ↓  (Down)     | Volume down (5%)               |
+| ←  (Left) / p | Previous track or restart track|
+| →  (Right) / n| Next track                     |
+| ↑  (Up) / +   | Volume up (5%)                 |
+| ↓  (Down) / - | Volume down (5%)               |
+| v             | Reset volume (special devices) |
 | q             | Quit live mode                 |
 
-**Note**: Left arrow will restart the current track if more than 5 seconds have elapsed, otherwise it will go to the previous track.
+**Notes**:
+- Left arrow/p will restart the current track if more than 5 seconds have elapsed, otherwise it will go to the previous track.
+- Volume controls (Up/Down/+/-) will only work for devices that support server-controlled volume.
+- The 'v' key is only shown for devices that may have external volume control.
 
 ### Player Control
 
