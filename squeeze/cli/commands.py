@@ -555,6 +555,57 @@ def format_time_simple(seconds: float) -> str:
     return f"{mins}:{secs:02d}"
 
 
+def print_status_header(use_color: bool = True, with_quit_hint: bool = False) -> None:
+    """Print a formatted status header.
+
+    Args:
+        use_color: Whether to use ANSI colors in the output
+        with_quit_hint: Whether to include the quit hint in the header
+    """
+    status_text = "====== SQUEEZE STATUS ======"
+    if with_quit_hint:
+        status_text += " (q=quit)"
+
+    header = f"{BOLD}{status_text}{RESET}" if use_color else status_text
+
+    print(header)
+    print("")
+
+
+def print_key_controls(status: PlayerStatus, use_color: bool = True) -> None:
+    """Print keyboard controls help text.
+
+    Args:
+        status: Player status to determine available controls
+        use_color: Whether to use ANSI colors in the output
+    """
+    # Determine key controls based on volume
+    volume_val = status.get("volume", 0)
+    has_volume_control = volume_val != 0
+
+    if use_color:
+        # Use different controls based on volume capability
+        if has_volume_control:
+            # Normal volume controls
+            vol_controls = f"{BOLD}+/↑{RESET} (vol+) {BOLD}-/↓{RESET} (vol-)"
+        else:
+            # For devices with 0 volume (likely external control)
+            vol_controls = f"{BOLD}v{RESET} (try vol reset)"
+
+        # Display all controls
+        print(
+            f"{BOLD}KEYS:{RESET} {BOLD}p/←{RESET} (prev/restart) {BOLD}n/→{RESET} (next) {vol_controls} {BOLD}q{RESET} (quit)"
+        )
+    else:
+        # Plain text controls based on volume capability
+        if has_volume_control:
+            vol_controls = "+/↑ (vol+) -/↓ (vol-)"
+        else:
+            vol_controls = "v (try vol reset)"
+
+        print(f"KEYS: p/← (prev/restart) n/→ (next) {vol_controls} q (quit)")
+
+
 def print_player_status(
     status: PlayerStatus, show_all_track_fields: bool = False, use_color: bool = True
 ) -> None:
@@ -568,14 +619,8 @@ def print_player_status(
     # Get formatted status as a list of strings
     status_lines = format_player_status(status, show_all_track_fields, use_color)
 
-    # Print the formatted status with color if enabled - more subtle header
-    header = (
-        f"{BOLD}====== SQUEEZE STATUS ======{RESET}"  # Just bold, no color
-        if use_color
-        else "====== SQUEEZE STATUS ======"
-    )
-    print(header)
-    print("")
+    # Print the header and status
+    print_status_header(use_color)
     for line in status_lines:
         print(line)
 
@@ -857,48 +902,16 @@ def display_live_status(
             status, show_all_track_fields=False, use_color=use_color
         )
 
-        # Print header with color if enabled - more subtle header
-        header = (
-            f"{BOLD}====== SQUEEZE STATUS ====== (q=quit){RESET}"  # Just bold, no color
-            if use_color
-            else "====== SQUEEZE STATUS ====== (q=quit)"
-        )
-        print(header)
-        print("")
+        # Print header with quit hint
+        print_status_header(use_color, with_quit_hint=True)
 
         # Print the formatted status lines
         for line in status_lines:
             print(line)
 
-        # Add keyboard controls info - modify based on volume state
+        # Add keyboard controls info
         print("")
-
-        # Determine key controls based on volume
-        volume_val = status.get("volume", 0)
-        has_volume_control = volume_val != 0
-
-        if use_color:
-            # Use different controls based on volume capability
-            if has_volume_control:
-                # Normal volume controls
-                vol_controls = f"{BOLD}+/↑{RESET} (vol+) {BOLD}-/↓{RESET} (vol-)"
-            else:
-                # For devices with 0 volume (likely external control)
-                vol_controls = f"{BOLD}v{RESET} (try vol reset)"
-
-            # Display all controls
-            print(
-                f"{BOLD}KEYS:{RESET} {BOLD}p/←{RESET} (prev/restart) {BOLD}n/→{RESET} (next) {vol_controls} {BOLD}q{RESET} (quit)"
-            )
-        else:
-            # Plain text controls based on volume capability
-            if has_volume_control:
-                vol_controls = "+/↑ (vol+) -/↓ (vol-)"
-            else:
-                vol_controls = "v (try vol reset)"
-
-            print(f"KEYS: p/← (prev/restart) n/→ (next) {vol_controls} q (quit)")
-        print("")
+        print_key_controls(status, use_color)
 
     # Setup for keyboard input
     print("Starting Live Status mode...")
