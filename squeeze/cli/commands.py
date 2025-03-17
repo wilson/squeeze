@@ -571,7 +571,7 @@ def print_status_header(use_color: bool = True) -> None:
     Args:
         use_color: Whether to use ANSI colors in the output
     """
-    status_text = "====== SQUEEZE STATUS ======"
+    status_text = "====== PLAYER STATUS ======"
     header = f"{BOLD}{status_text}{RESET}" if use_color else status_text
 
     print(header)
