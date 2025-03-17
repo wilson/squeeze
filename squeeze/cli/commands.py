@@ -544,17 +544,13 @@ def format_time_simple(seconds: float) -> str:
     return f"{mins}:{secs:02d}"
 
 
-def print_status_header(use_color: bool = True, with_quit_hint: bool = False) -> None:
+def print_status_header(use_color: bool = True) -> None:
     """Print a formatted status header.
 
     Args:
         use_color: Whether to use ANSI colors in the output
-        with_quit_hint: Whether to include the quit hint in the header
     """
     status_text = "====== SQUEEZE STATUS ======"
-    if with_quit_hint:
-        status_text += " (q=quit)"
-
     header = f"{BOLD}{status_text}{RESET}" if use_color else status_text
 
     print(header)
@@ -956,8 +952,8 @@ def display_live_status(
             status, show_all_track_fields=False, use_color=use_color
         )
 
-        # Print header with quit hint
-        print_status_header(use_color, with_quit_hint=True)
+        # Print header
+        print_status_header(use_color)
 
         # Print the formatted status lines
         for line in status_lines:
