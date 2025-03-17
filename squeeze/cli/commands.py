@@ -500,18 +500,7 @@ def format_player_status(
             duration = float(current_track.get("duration", 0))
 
             if duration > 0:
-                # Use subtle formatting for time display
-                pos_display = colorize(
-                    format_time_simple(position), BOLD
-                )  # Bold for current position
-                dur_display = colorize(
-                    format_time_simple(duration), DIM
-                )  # Dim for total duration
-                # Use consistent padding for TIME field
-                time_label = colorize("TIME:".ljust(10), BOLD)
-                lines.append(f"{time_label} {pos_display} / {dur_display}")
-
-                # Simple progress bar with colored components
+                # Progress bar with colored components
                 percent = min(100, int((position / duration) * 100))
                 bar_width = 30
                 filled_width = int(bar_width * percent / 100)
