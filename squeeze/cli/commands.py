@@ -723,6 +723,93 @@ def get_keypress(timeout: float = 0.1) -> str | None:
     return None
 
 
+def handle_key_press(
+    key: str,
+    client: ClientType,
+    player_id: str,
+    status: PlayerStatus,
+    display_function: Callable[[PlayerStatus, bool], None],
+    use_color: bool,
+) -> tuple[bool, bool]:
+    """Handle key press events uniformly.
+
+    Args:
+        key: Key identifier (e.g., "q", "up", "down", "left", "right", "p", "n")
+        client: Squeeze client instance
+        player_id: ID of the player to control
+        status: Current player status
+        display_function: Function to display the status
+        use_color: Whether to use ANSI colors
+
+    Returns:
+        Tuple of (should_exit, key_pressed)
+    """
+    import time
+
+    # Check for quit key
+    if key == "q":
+        return True, False
+
+    # Flag to track if any key was pressed
+    key_pressed = False
+
+    # Extract position from status
+    current_track = status.get("current_track", {})
+    try:
+        position = float(current_track.get("position", 0))
+    except (ValueError, TypeError):
+        position = 0
+
+    # Extract volume from status
+    volume_val = status.get("volume", 0)
+
+    # Handle navigation keys
+    if key == "p" or key == "left":  # Previous track handling - dual behavior
+        if position <= 5:
+            client.send_command(player_id, "playlist", ["index", "-1"])
+        else:
+            client.send_command(player_id, "time", ["0"])
+        # Force immediate refresh
+        status = client.get_player_status(player_id)
+        display_function(status, use_color)
+        key_pressed = True
+
+    elif key == "n" or key == "right":  # Next track
+        client.send_command(player_id, "playlist", ["index", "+1"])
+        # Force immediate refresh
+        status = client.get_player_status(player_id)
+        display_function(status, use_color)
+        key_pressed = True
+
+    # Handle volume controls
+    elif (key == "+" or key == "up") and volume_val != 0:  # Volume up
+        client.send_command(player_id, "mixer", ["volume", "+5"])
+        time.sleep(0.2)  # Small delay to allow volume to change
+        # Force immediate refresh to show new volume
+        status = client.get_player_status(player_id)
+        display_function(status, use_color)
+        key_pressed = True
+
+    elif (key == "-" or key == "down") and volume_val != 0:  # Volume down
+        client.send_command(player_id, "mixer", ["volume", "-5"])
+        time.sleep(0.2)  # Small delay to allow volume to change
+        # Force immediate refresh to show new volume
+        status = client.get_player_status(player_id)
+        display_function(status, use_color)
+        key_pressed = True
+
+    # Volume reset for WiiM devices
+    elif key == "v" and volume_val == 0:  # Volume reset for external volume devices
+        client.send_command(player_id, "mixer", ["volume", "100"])
+        time.sleep(0.5)  # Allow time for volume change to take effect
+        # Force immediate refresh
+        status = client.get_player_status(player_id)
+        display_function(status, use_color)
+        key_pressed = True
+
+    return False, key_pressed
+
+
 def display_live_status(
     client: ClientType, player_id: str, use_color: bool = True
 ) -> None:
@@ -751,8 +838,6 @@ def display_live_status(
     old_settings = None
     fd = None
     is_raw_mode = False
-
-    # We now use the global format_time_simple function
 
     # Helper to clear the screen in a cross-platform way
     def clear_screen() -> None:
@@ -801,7 +886,7 @@ def display_live_status(
                 # For devices with 0 volume (likely external control)
                 vol_controls = f"{BOLD}v{RESET} (try vol reset)"
 
-            # Display all controls - removed 's' since left arrow/p already handle restart
+            # Display all controls
             print(
                 f"{BOLD}KEYS:{RESET} {BOLD}p/←{RESET} (prev/restart) {BOLD}n/→{RESET} (next) {vol_controls} {BOLD}q{RESET} (quit)"
             )
@@ -853,15 +938,6 @@ def display_live_status(
                 # Use the simple display function with color if enabled
                 display_simple_status(status, use_color=use_color)
 
-                # Extract data for key handling
-                current_track = status.get("current_track", {})
-                try:
-                    position = float(current_track.get("position", 0))
-                    # We don't need volume value for absolute adjustments since we're
-                    # using relative volume adjustments for WiiM compatibility
-                except (ValueError, TypeError):
-                    position = 0
-
                 # Handle keyboard input
                 key_pressed = False
 
@@ -873,148 +949,99 @@ def display_live_status(
                     if msvcrt.kbhit():
                         key = msvcrt.getch()
 
-                        # Process 'q' immediately for responsiveness
+                        # Handle 'q' key immediately
                         if key == b"q":
                             break
 
-                        # For arrow keys and letter keys, respond immediately without debounce
-                        # to make the interface much more responsive
-                        key_pressed = True
-
+                        # Process arrow keys
                         if key == b"\xe0":  # Special keys
                             arrow = msvcrt.getch()
 
+                            # Map arrow keys to standardized key names
                             if arrow == b"K":  # Left
-                                if position <= 5:
-                                    client.send_command(
-                                        player_id, "playlist", ["index", "-1"]
-                                    )
-                                    # Force an immediate status refresh
-                                    status = client.get_player_status(player_id)
-                                    display_simple_status(status, use_color=use_color)
-                                else:
-                                    client.send_command(player_id, "time", ["0"])
+                                should_exit, was_pressed = handle_key_press(
+                                    "left",
+                                    client,
+                                    player_id,
+                                    status,
+                                    display_simple_status,
+                                    use_color,
+                                )
+                                if should_exit:
+                                    break
+                                key_pressed = was_pressed
 
                             elif arrow == b"M":  # Right
-                                client.send_command(
-                                    player_id, "playlist", ["index", "+1"]
+                                should_exit, was_pressed = handle_key_press(
+                                    "right",
+                                    client,
+                                    player_id,
+                                    status,
+                                    display_simple_status,
+                                    use_color,
                                 )
-                                # Force an immediate status refresh
-                                status = client.get_player_status(player_id)
-                                display_simple_status(status, use_color=use_color)
+                                if should_exit:
+                                    break
+                                key_pressed = was_pressed
 
                             elif arrow == b"H":  # Up
-                                # Only allow volume up if the player reports non-zero volume
-                                volume_val = status.get("volume", 0)
-                                if volume_val != 0:
-                                    # Use relative volume adjustment
-                                    client.send_command(
-                                        player_id, "mixer", ["volume", "+5"]
-                                    )
-                                    # Small delay to allow volume to change
-                                    time.sleep(0.2)
-                                    # Force immediate refresh to show new volume
-                                    status = client.get_player_status(player_id)
-                                    display_simple_status(status, use_color=use_color)
+                                should_exit, was_pressed = handle_key_press(
+                                    "up",
+                                    client,
+                                    player_id,
+                                    status,
+                                    display_simple_status,
+                                    use_color,
+                                )
+                                if should_exit:
+                                    break
+                                key_pressed = was_pressed
 
                             elif arrow == b"P":  # Down
-                                # Only allow volume down if the player reports non-zero volume
-                                volume_val = status.get("volume", 0)
-                                if volume_val != 0:
-                                    # Use relative volume adjustment
-                                    client.send_command(
-                                        player_id, "mixer", ["volume", "-5"]
-                                    )
-                                    # Small delay to allow volume to change
-                                    time.sleep(0.2)
-                                    # Force immediate refresh to show new volume
-                                    status = client.get_player_status(player_id)
-                                    display_simple_status(status, use_color=use_color)
+                                should_exit, was_pressed = handle_key_press(
+                                    "down",
+                                    client,
+                                    player_id,
+                                    status,
+                                    display_simple_status,
+                                    use_color,
+                                )
+                                if should_exit:
+                                    break
+                                key_pressed = was_pressed
 
-                            # Handle 'v' key for volume reset for WiiM devices
-                            elif key == b"v" or key == b"V":  # Volume reset to 100%
-                                volume_val = status.get("volume", 0)
-                                if (
-                                    volume_val == 0
-                                ):  # Only for devices with volume issues
-                                    # Try to set volume to 100%
-                                    client.send_command(
-                                        player_id, "mixer", ["volume", "100"]
-                                    )
-                                    # Allow time for volume change to take effect
-                                    time.sleep(0.5)
-                                    # Force immediate refresh
-                                    status = client.get_player_status(player_id)
-                                    display_simple_status(status, use_color=use_color)
+                        # Handle letter keys
+                        elif key in (b"p", b"n", b"v", b"+", b"-"):
+                            key_str = key.decode("utf-8")
+                            should_exit, was_pressed = handle_key_press(
+                                key_str,
+                                client,
+                                player_id,
+                                status,
+                                display_simple_status,
+                                use_color,
+                            )
+                            if should_exit:
+                                break
+                            key_pressed = was_pressed
 
-                # Unix-like keyboard handling - use the get_keypress function for more reliable detection
+                # Unix-like keyboard handling - use the get_keypress function
                 try:
-                    key = get_keypress(
-                        0.01
-                    )  # Use a very short timeout for responsive UI
+                    key = get_keypress(0.01)  # Short timeout for responsive UI
 
-                    if key == "q":  # Quit immediately
-                        break
+                    if key:
+                        should_exit, was_pressed = handle_key_press(
+                            key,
+                            client,
+                            player_id,
+                            status,
+                            display_simple_status,
+                            use_color,
+                        )
+                        if should_exit:
+                            break
+                        key_pressed = was_pressed
 
-                    elif (
-                        key == "p" or key == "left"
-                    ):  # Previous track handling - dual behavior
-                        if position <= 5:
-                            client.send_command(player_id, "playlist", ["index", "-1"])
-                            # Force immediate refresh
-                            status = client.get_player_status(player_id)
-                            display_simple_status(status, use_color=use_color)
-                        else:
-                            client.send_command(player_id, "time", ["0"])
-                        key_pressed = True
-
-                    elif key == "n" or key == "right":  # Next track
-                        client.send_command(player_id, "playlist", ["index", "+1"])
-                        # Force immediate refresh
-                        status = client.get_player_status(player_id)
-                        display_simple_status(status, use_color=use_color)
-                        key_pressed = True
-
-                    elif key == "+" or key == "up":  # Volume up
-                        # Only allow volume up if the player reports non-zero volume
-                        volume_val = status.get("volume", 0)
-                        if volume_val != 0:
-                            # Use relative volume adjustment
-                            client.send_command(player_id, "mixer", ["volume", "+5"])
-                            # Small delay to allow volume to change
-                            time.sleep(0.2)
-                            # Force immediate refresh to show new volume
-                            status = client.get_player_status(player_id)
-                            display_simple_status(status, use_color=use_color)
-                        key_pressed = True
-
-                    elif key == "-" or key == "down":  # Volume down
-                        # Only allow volume down if the player reports non-zero volume
-                        volume_val = status.get("volume", 0)
-                        if volume_val != 0:
-                            # Use relative volume adjustment
-                            client.send_command(player_id, "mixer", ["volume", "-5"])
-                            # Small delay to allow volume to change
-                            time.sleep(0.2)
-                            # Force immediate refresh to show new volume
-                            status = client.get_player_status(player_id)
-                            display_simple_status(status, use_color=use_color)
-                        key_pressed = True
-
-                    # The 's' key for restart has been removed as redundant
-                    # Left arrow/p already handle this functionality
-
-                    elif key == "v":  # Volume reset to 100% for external volume devices
-                        volume_val = status.get("volume", 0)
-                        if volume_val == 0:  # Only for devices with volume issues
-                            # Try to set volume to 100%
-                            client.send_command(player_id, "mixer", ["volume", "100"])
-                            # Allow time for volume change to take effect
-                            time.sleep(0.5)
-                            # Force immediate refresh
-                            status = client.get_player_status(player_id)
-                            display_simple_status(status, use_color=use_color)
-                        key_pressed = True
                 except Exception:
                     # Ignore keyboard input errors
                     pass
@@ -1022,7 +1049,6 @@ def display_live_status(
                 # Adjust sleep time based on activity for better responsiveness
                 if key_pressed:
                     # Short sleep after key press to see the effect quickly
-                    # Allow time for the server to update its status
                     time.sleep(0.3)
                 else:
                     # Longer sleep when idle to reduce CPU usage
