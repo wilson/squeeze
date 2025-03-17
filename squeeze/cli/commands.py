@@ -1338,22 +1338,16 @@ def volume_command(args: VolumeCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    volume = args.volume
-    client = create_client(server_url)
+    # Capture and validate volume before executing the command
+    volume = max(0, min(100, args.volume))  # Ensure volume is in valid range
 
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
-    try:
-        # Ensure volume is in valid range
-        volume = max(0, min(100, volume))
-        client.set_volume(player_id, volume)
-        print(f"Volume set to {volume} for player {player_id}")
-    except Exception as e:
-        print(f"Error setting volume: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args,
+        "volume",
+        lambda client, player_id: client.set_volume(player_id, volume),
+        success_message=f"Volume set to {volume} for player {args.player_id or '<selected player>'}",
+        error_message="Error setting volume",
+    )
 
 
 def power_command(args: PowerCommandArgs) -> None:
@@ -1643,8 +1637,8 @@ def prev_command(args: PrevCommandArgs) -> None:
 def execute_simple_command(
     args: PlayerCommandArgs,
     command_name: str,
-    command_fn: Callable[[ClientType, str], None],
-    success_message: str | None = None,
+    command_fn: Callable[[ClientType, str], Any],
+    success_message: str | Callable[[Any], str] | None = None,
     error_message: str | None = None,
 ) -> None:
     """Execute a simple player command with standardized error handling.
@@ -1652,8 +1646,8 @@ def execute_simple_command(
     Args:
         args: Command-line arguments
         command_name: Name of the command for error reporting
-        command_fn: Function to execute the command
-        success_message: Optional custom success message
+        command_fn: Function to execute the command, can return a value used in success message
+        success_message: Optional custom success message or function to generate one
         error_message: Optional custom error message
     """
     server_url = get_server_url(args.server)
@@ -1664,12 +1658,18 @@ def execute_simple_command(
         sys.exit(1)
 
     try:
-        # Execute the command function
-        command_fn(client, player_id)
+        # Execute the command function which may return a value
+        result = command_fn(client, player_id)
 
         # Print success message
         if success_message:
-            print(success_message)
+            if callable(success_message):
+                # Generate message from result if function provided
+                msg = success_message(result)
+                print(msg)
+            else:
+                # Use static message
+                print(success_message)
         else:
             print(f"{command_name.capitalize()} command sent to player {player_id}")
     except Exception as e:
@@ -1699,6 +1699,44 @@ def now_playing_command(args: PlayerCommandArgs) -> None:
     )
 
 
+def determine_shuffle_mode(
+    client: ClientType, player_id: str, mode: str | None
+) -> tuple[str, str]:
+    """Determine the shuffle mode value and name based on input or cycling.
+
+    Args:
+        client: Client instance
+        player_id: ID of the player to control
+        mode: Mode name or None to cycle
+
+    Returns:
+        Tuple of (mode_value, mode_name)
+
+    Raises:
+        Exception: If there's an error getting the current mode
+    """
+    # Use pattern matching for cleaner flow control
+    match mode:
+        case None:
+            # Cycle to next mode if none specified
+            status = client.get_player_status(player_id)
+            current_mode = status.get("shuffle", 0)
+            next_mode = (current_mode + 1) % 3
+            mode_value = str(next_mode)
+            mode_name = ShuffleMode.to_string(next_mode)
+        case "off":
+            mode_value = str(ShuffleMode.OFF)
+            mode_name = ShuffleMode.to_string(ShuffleMode.OFF)
+        case "songs":
+            mode_value = str(ShuffleMode.SONGS)
+            mode_name = ShuffleMode.to_string(ShuffleMode.SONGS)
+        case "albums":
+            mode_value = str(ShuffleMode.ALBUMS)
+            mode_name = ShuffleMode.to_string(ShuffleMode.ALBUMS)
+
+    return mode_value, mode_name
+
+
 def shuffle_command(args: ShuffleCommandArgs) -> None:
     """Set or cycle through shuffle modes.
 
@@ -1712,44 +1750,78 @@ def shuffle_command(args: ShuffleCommandArgs) -> None:
     Args:
         args: Command-line arguments as ShuffleCommandArgs
     """
-    server_url = get_server_url(args.server)
     mode = args.mode
 
-    client = create_client_with_error_handling(server_url)
+    try:
 
-    player_id = get_player_id(args, client)
-    if not player_id:
+        def shuffle_cmd(client: ClientType, player_id: str) -> str:
+            # Get the mode value and name
+            mode_value, mode_name = determine_shuffle_mode(client, player_id, mode)
+
+            # Set the shuffle mode
+            client.send_command(player_id, "playlist", ["shuffle", mode_value])
+
+            return mode_name
+
+        # Execute the command
+        execute_simple_command(
+            args,
+            "shuffle",
+            lambda client, player_id: shuffle_cmd(client, player_id),
+            lambda mode_name: f"Shuffle mode set to '{mode_name}' for player {args.player_id or '<selected player>'}",
+            "Error setting shuffle mode",
+        )
+    except Exception as e:
+        print(f"Error processing shuffle command: {e}", file=sys.stderr)
         sys.exit(1)
 
+
+def determine_repeat_mode(
+    client: ClientType, player_id: str, mode: str | None
+) -> tuple[str, str]:
+    """Determine the repeat mode value and name based on input or cycling.
+
+    Args:
+        client: Client instance
+        player_id: ID of the player to control
+        mode: Mode name or None to cycle
+
+    Returns:
+        Tuple of (mode_value, mode_name)
+
+    Raises:
+        Exception: If there's an error getting the current mode
+    """
     # Use pattern matching for cleaner flow control
     match mode:
         case None:
             # Cycle to next mode if none specified
-            try:
-                status = client.get_player_status(player_id)
-                current_mode = status.get("shuffle", 0)
-                next_mode = (current_mode + 1) % 3
-                mode_value = str(next_mode)
-                mode_name = ShuffleMode.to_string(next_mode)
-            except Exception as e:
-                print(f"Error getting current shuffle mode: {e}", file=sys.stderr)
-                sys.exit(1)
-        case "off":
-            mode_value = str(ShuffleMode.OFF)
-            mode_name = ShuffleMode.to_string(ShuffleMode.OFF)
-        case "songs":
-            mode_value = str(ShuffleMode.SONGS)
-            mode_name = ShuffleMode.to_string(ShuffleMode.SONGS)
-        case "albums":
-            mode_value = str(ShuffleMode.ALBUMS)
-            mode_name = ShuffleMode.to_string(ShuffleMode.ALBUMS)
+            status = client.get_player_status(player_id)
+            current_mode = status.get("repeat", 0)
 
-    try:
-        client.send_command(player_id, "playlist", ["shuffle", mode_value])
-        print(f"Shuffle mode set to '{mode_name}' for player {player_id}")
-    except Exception as e:
-        print(f"Error setting shuffle mode: {e}", file=sys.stderr)
-        sys.exit(1)
+            # Define the cycle order: 0 (off) -> 2 (all) -> 1 (one) -> 0 (off)
+            # This order matches how most music players cycle through repeat modes
+            next_mode = (
+                RepeatMode.ALL
+                if current_mode == RepeatMode.OFF
+                else (
+                    RepeatMode.ONE if current_mode == RepeatMode.ALL else RepeatMode.OFF
+                )  # RepeatMode.ONE or any other case
+            )
+
+            mode_value = str(next_mode)
+            mode_name = RepeatMode.to_string(next_mode)
+        case "off":
+            mode_value = str(RepeatMode.OFF)
+            mode_name = RepeatMode.to_string(RepeatMode.OFF)
+        case "one":
+            mode_value = str(RepeatMode.ONE)
+            mode_name = RepeatMode.to_string(RepeatMode.ONE)
+        case "all":
+            mode_value = str(RepeatMode.ALL)
+            mode_name = RepeatMode.to_string(RepeatMode.ALL)
+
+    return mode_value, mode_name
 
 
 def repeat_command(args: RepeatCommandArgs) -> None:
@@ -1765,55 +1837,29 @@ def repeat_command(args: RepeatCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client_with_error_handling(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
     mode = args.mode
 
-    # Use pattern matching for cleaner flow control
-    match mode:
-        case None:
-            # Cycle to next mode if none specified
-            try:
-                status = client.get_player_status(player_id)
-                current_mode = status.get("repeat", 0)
-
-                # Define the cycle order: 0 (off) -> 2 (all) -> 1 (one) -> 0 (off)
-                # This order matches how most music players cycle through repeat modes
-                next_mode = (
-                    RepeatMode.ALL
-                    if current_mode == RepeatMode.OFF
-                    else (
-                        RepeatMode.ONE
-                        if current_mode == RepeatMode.ALL
-                        else RepeatMode.OFF
-                    )  # RepeatMode.ONE or any other case
-                )
-
-                mode_value = str(next_mode)
-                mode_name = RepeatMode.to_string(next_mode)
-            except Exception as e:
-                print(f"Error getting current repeat mode: {e}", file=sys.stderr)
-                sys.exit(1)
-        case "off":
-            mode_value = str(RepeatMode.OFF)
-            mode_name = RepeatMode.to_string(RepeatMode.OFF)
-        case "one":
-            mode_value = str(RepeatMode.ONE)
-            mode_name = RepeatMode.to_string(RepeatMode.ONE)
-        case "all":
-            mode_value = str(RepeatMode.ALL)
-            mode_name = RepeatMode.to_string(RepeatMode.ALL)
-
     try:
-        client.send_command(player_id, "playlist", ["repeat", mode_value])
-        print(f"Repeat mode set to '{mode_name}' for player {player_id}")
+
+        def repeat_cmd(client: ClientType, player_id: str) -> str:
+            # Get the mode value and name
+            mode_value, mode_name = determine_repeat_mode(client, player_id, mode)
+
+            # Set the repeat mode
+            client.send_command(player_id, "playlist", ["repeat", mode_value])
+
+            return mode_name
+
+        # Execute the command
+        execute_simple_command(
+            args,
+            "repeat",
+            lambda client, player_id: repeat_cmd(client, player_id),
+            lambda mode_name: f"Repeat mode set to '{mode_name}' for player {args.player_id or '<selected player>'}",
+            "Error setting repeat mode",
+        )
     except Exception as e:
-        print(f"Error setting repeat mode: {e}", file=sys.stderr)
+        print(f"Error processing repeat command: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -1833,13 +1879,6 @@ def remote_command(args: RemoteCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client_with_error_handling(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
     button = args.button
 
     # Map friendly button names to IR codes
@@ -1854,13 +1893,49 @@ def remote_command(args: RemoteCommandArgs) -> None:
 
     command_name = button_map[button]
 
-    try:
-        # Send the IR code to simulate the button press
-        client.send_command(player_id, "button", [command_name])
-        print(f"Sent '{button}' button press to player {player_id}")
-    except Exception as e:
-        print(f"Error sending button command: {e}", file=sys.stderr)
-        sys.exit(1)
+    execute_simple_command(
+        args,
+        "button",
+        lambda client, player_id: client.send_command(
+            player_id, "button", [command_name]
+        ),
+        success_message=f"Sent '{button}' button press to player {args.player_id or '<selected player>'}",
+        error_message=f"Error sending '{button}' button command",
+    )
+
+
+def build_display_params(message: str, duration: int | None = None) -> list[str]:
+    """Build display command parameters from a message string.
+
+    Args:
+        message: Message to display, can include \n for line breaks
+        duration: Optional display duration in seconds
+
+    Returns:
+        List of parameters for the display command
+    """
+    # Handle line breaks - different players may have varying display capabilities
+    lines = message.split("\\n")
+
+    # Configure command parameters
+    params = ["line1", lines[0]]
+
+    # Add line2 if provided
+    if len(lines) > 1:
+        params.extend(["line2", lines[1]])
+
+    # Add more lines if needed and supported by the player
+    if len(lines) > 2:
+        params.extend(["line3", lines[2]])
+
+    if len(lines) > 3:
+        params.extend(["line4", lines[3]])
+
+    # Add duration if specified
+    if duration:
+        params.extend(["duration", str(duration)])
+
+    return params
 
 
 def display_command(args: DisplayCommandArgs) -> None:
@@ -1872,53 +1947,61 @@ def display_command(args: DisplayCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client_with_error_handling(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
     message = args.message
     if not message:
         print("Error: Message is required", file=sys.stderr)
         sys.exit(1)
 
-    # Handle line breaks - different players may have varying display capabilities
-    lines = message.split("\\n")
-
     # Get optional duration
     duration = args.duration
 
-    try:
-        # Configure command parameters
-        params = ["line1", lines[0]]
+    # Create success message based on duration
+    if duration:
+        success_msg = f"Displayed message on {args.player_id or '<selected player>'} for {duration} seconds"
+    else:
+        success_msg = f"Displayed message on {args.player_id or '<selected player>'}"
 
-        # Add line2 if provided
-        if len(lines) > 1:
-            params.extend(["line2", lines[1]])
+    # Execute display command
+    execute_simple_command(
+        args,
+        "display",
+        lambda client, player_id: client.send_command(
+            player_id, "display", build_display_params(message, duration)
+        ),
+        success_message=success_msg,
+        error_message="Error displaying message",
+    )
 
-        # Add more lines if needed and supported by the player
-        if len(lines) > 2:
-            params.extend(["line3", lines[2]])
 
-        if len(lines) > 3:
-            params.extend(["line4", lines[3]])
+def parse_time_position(position: str) -> int:
+    """Parse a time position string into seconds.
 
-        # Add duration if specified
-        if duration:
-            params.extend(["duration", str(duration)])
+    Handles formats: seconds, MM:SS, HH:MM:SS
 
-        # Send the display command
-        client.send_command(player_id, "display", params)
+    Args:
+        position: Time position as string
 
-        if duration:
-            print(f"Displayed message on {player_id} for {duration} seconds")
-        else:
-            print(f"Displayed message on {player_id}")
-    except Exception as e:
-        print(f"Error displaying message: {e}", file=sys.stderr)
-        sys.exit(1)
+    Returns:
+        Total seconds as integer
+
+    Raises:
+        ValueError: If the format is invalid
+    """
+    # Match against different time formats
+    match position.split(":"):
+        case [seconds] if seconds.isdigit():
+            # Simple seconds value
+            return int(seconds)
+        case [minutes, seconds] if minutes.isdigit() and seconds.isdigit():
+            # MM:SS format
+            return int(minutes) * 60 + int(seconds)
+        case [hours, minutes, seconds] if (
+            hours.isdigit() and minutes.isdigit() and seconds.isdigit()
+        ):
+            # HH:MM:SS format
+            return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+        case _:
+            raise ValueError(f"Invalid time format: {position}")
 
 
 def seek_command(args: SeekCommandArgs) -> None:
@@ -1927,36 +2010,21 @@ def seek_command(args: SeekCommandArgs) -> None:
     Args:
         args: Command-line arguments
     """
-    server_url = get_server_url(args.server)
-    client = create_client_with_error_handling(server_url)
-
-    player_id = get_player_id(args, client)
-    if not player_id:
-        sys.exit(1)
-
     position = args.position
 
-    # Parse time value which can be in seconds or MM:SS format
     try:
-        # Match against different time formats
-        match position.split(":"):
-            case [seconds] if seconds.isdigit():
-                # Simple seconds value
-                total_seconds = int(seconds)
-            case [minutes, seconds] if minutes.isdigit() and seconds.isdigit():
-                # MM:SS format
-                total_seconds = int(minutes) * 60 + int(seconds)
-            case [hours, minutes, seconds] if (
-                hours.isdigit() and minutes.isdigit() and seconds.isdigit()
-            ):
-                # HH:MM:SS format
-                total_seconds = int(hours) * 3600 + int(minutes) * 60 + int(seconds)
-            case _:
-                raise ValueError(f"Invalid time format: {position}")
+        # Parse the time position
+        total_seconds = parse_time_position(position)
 
-        # Use the seek_to_time method
-        client.seek_to_time(player_id, total_seconds)
-        print(f"Seeked to {format_time(total_seconds)} in the current track")
-    except Exception as e:
-        print(f"Error seeking to position: {e}", file=sys.stderr)
+        # Use the helper with the parsed time
+        execute_simple_command(
+            args,
+            "seek",
+            lambda client, player_id: client.seek_to_time(player_id, total_seconds),
+            success_message=f"Seeked to {format_time(total_seconds)} in the current track",
+            error_message="Error seeking to position",
+        )
+    except ValueError as e:
+        # Handle format errors specifically
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
