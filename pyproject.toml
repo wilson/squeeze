@@ -54,3 +54,6 @@ ignore = ["E203", "B904", "E501"]  # Ignore whitespace, exception clause, line l
 
 [tool.ruff.lint.isort]
 known-first-party = ["squeeze"]
+
+[tool.virtualenv]
+name = "squeeze"
